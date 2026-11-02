@@ -306,32 +306,42 @@
       this.brightness = value; this.emit();
     }
 
-    /* ---- file browsing & deletion (Jieli SDK semantics) ---- */
-    async browseFiles({ type = 1, pageSize = 20, devHandler = null, clusters = [0], maxEntries = 200 } = {}) {
+    /* ---- file browsing & deletion (Jieli SDK semantics) ----
+       PathData.type describes the node being opened (0 = folder, 1 = file), not a filter:
+       the root is a folder, so the listing starts with type 0 and clusters [0]. Entries arrive
+       as DATA frames (first byte 0x0C) and the badge closes with 0x0D. Folders found at the
+       root are opened one level deeper with clusters [0, cluster]. */
+    async browseFiles({ pageSize = 20, devHandler = null, maxEntries = 300, depth = 2 } = {}) {
       if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
       if (this.storage === null) await this.queryStorage();
       const handle = devHandler ?? this.storage;
-      const all = [];
-      let start = 1, total = Infinity;
-      while (all.length < Math.min(total, maxEntries)) {
-        const page = await this.browsePage(type, pageSize, start, handle, clusters);
-        total = page.total || total;
-        all.push(...page.entries);
-        if (!page.entries.length || page.entries.length < pageSize) break;
-        start += page.entries.length;
-      }
+      const walk = async (clusters, level, path) => {
+        const out = []; let start = 1;
+        for (;;) {
+          const page = await this.browsePage(0, pageSize, start, handle, clusters);
+          out.push(...page.entries.map((e) => ({ ...e, path, clusters })));
+          if (!page.entries.length || page.entries.length < pageSize || out.length >= maxEntries) break;
+          start += page.entries.length;
+        }
+        const files = out.filter((e) => e.isFile), folders = out.filter((e) => !e.isFile);
+        if (level < depth) for (const f of folders.slice(0, 12)) { try { files.push(...await walk(clusters.concat(f.cluster), level + 1, (path ? path + '/' : '') + f.name)); } catch (e) { this.log('Carpeta ' + f.name + ': ' + e.message); } }
+        if (level === 0) files.push(...folders.map((f) => ({ ...f, path: '' })));
+        return files;
+      };
+      const all = await walk([0], 0, '');
       this.files = all.map((e) => ({ ...e, device: this.storageName || 'SD1', handle }));
-      this.log('Archivos en el badge: ' + this.files.length + (Number.isFinite(total) ? ' de ' + total : ''));
+      this.log('Archivos en el badge: ' + this.files.filter((f) => f.isFile).length + ' archivos, ' + this.files.filter((f) => !f.isFile).length + ' carpetas');
       this.emit(); return this.files;
     }
     browsePage(type, readNum, startIndex, handle, clusters) {
       return new Promise((resolve, reject) => {
-        const chunks = []; let total = 0;
-        const finish = (err) => { clearTimeout(this.browseTimer); this.browse = null; if (err) reject(err); else resolve({ total, entries: R.parseFileStructs(concat(...chunks)) }); };
-        this.browse = { data: (d) => { chunks.push(d); clearTimeout(this.browseTimer); this.browseTimer = setTimeout(() => finish(), 1500); }, stop: (reason) => { if (reason === 0 || reason === 1) finish(); else finish(new Error('El badge interrumpió el listado (código ' + reason + ').')); } };
-        this.browseTimer = setTimeout(() => finish(), 6000);
+        const chunks = []; let total = null, done = false;
+        const finish = (err) => { if (done) return; done = true; clearTimeout(this.browseTimer); this.browse = null; if (err) reject(err); else { const entries = R.parseFileStructs(concat(...chunks)); this.log('Listado [' + clusters.join('/') + '] desde ' + startIndex + ': ' + entries.length + ' entradas' + (total !== null ? ' de ' + total : '') + ' · ' + entries.map((e) => (e.isFile ? '' : '[DIR] ') + e.name).join(', ')); resolve({ total, entries }); } };
+        const idle = (ms) => { clearTimeout(this.browseTimer); this.browseTimer = setTimeout(() => finish(), ms); };
+        this.browse = { data: (d) => { chunks.push(d); idle(1500); }, stop: (reason) => { if (reason === 0 || reason === 1) setTimeout(() => finish(), 50); else finish(new Error('El badge interrumpió el listado (código ' + reason + ').')); } };
+        idle(6000);
         this.request(OP.FILE_BROWSE, R.fileBrowseParam(type, readNum, startIndex, handle, clusters), 8000)
-          .then((p) => { total = R.parseBrowseTotal(p); if (!total) finish(); })
+          .then((p) => { total = p.length ? R.parseBrowseTotal(p) : null; if (total === 0) idle(400); else idle(2500); })
           .catch((e) => finish(e.status === 2 ? new Error('Este badge no soporta el listado de archivos (NOT_SUPPORTED).') : e));
       });
     }
@@ -340,11 +350,20 @@
       if (!entry) throw new Error('Elegí un archivo.');
       if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
       if (entry.cluster !== undefined && entry.handle !== undefined) {
-        const r = await this.tryRequest(OP.FILE_DELETE, R.deleteByClusterParam(entry.handle, entry.isFile !== false, entry.cluster, true), 10000);
+        const r = await this.tryRequest(OP.FILE_DELETE, R.deleteByClusterParam(entry.handle, entry.isFile !== false, entry.cluster, true), 15000);
         if (r.status === 0) { this.log('Eliminado ' + entry.name + ' (clúster ' + entry.cluster + ')'); this.files = this.files.filter((f) => f !== entry); this.emit(); return true; }
         this.log('Borrado por clúster rechazado (' + (R.STATUS_NAMES[r.status] || r.status) + '); se intenta por nombre.');
       }
       return this.deleteFileByName(entry.name);
+    }
+    /* 0x22 DEVICE_FORMAT [devHandle BE32]: wipes the whole media storage. Only on explicit request. */
+    async formatStorage() {
+      if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
+      if (this.storage === null) await this.queryStorage();
+      const r = await this.tryRequest(OP.DEVICE_FORMAT, u32be(this.storage), 60000);
+      const reason = r.parameter[0] ?? 0;
+      if (r.status !== 0 || reason !== 0) throw new Error('El badge no formateó (' + (R.STATUS_NAMES[r.status] || r.status) + ', motivo ' + reason + ').');
+      this.log('Almacenamiento ' + this.storageName + ' formateado.'); this.files = []; this.emit(); return true;
     }
     async deleteFileByName(name) {
       const r = await this.tryRequest(OP.ONE_FILE_DELETE, R.deleteByNameParam(name), 10000);
@@ -362,7 +381,7 @@
       await run('Almacenamiento SD1', () => this.queryStorage().then((h) => '0x' + h.toString(16)));
       await run('Batería', () => this.refreshBattery().then((b) => (b.level ?? '?') + ' %' + (b.charging ? ' (cargando)' : '')));
       if (this.control) await run('Pantalla (Qix 0xC6)', () => this.queryScreen().then((s) => s.width + '×' + s.height + ' · imagen ' + s.pictureWidth + '×' + s.pictureHeight));
-      await run('Archivos (0x0C)', () => this.browseFiles().then((f) => f.length + ' entradas'));
+      await run('Archivos (0x0C)', () => this.browseFiles().then((f) => f.filter((x) => x.isFile).length + ' archivos'));
       return steps;
     }
 
@@ -397,9 +416,9 @@
     }
     async handleCommand(p) {
       const t = this.transfer;
-      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.browse?.data(p.parameter.slice(1)); return; }
-      if (p.opcode === OP.FILE_BROWSE_STOP) { if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
-      if (!t?.active) { this.log('Comando 0x' + p.opcode.toString(16) + ' fuera de transferencia.'); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
+      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.log('RX listado ' + hx(p.parameter.slice(1), 48)); if (this.browse) this.browse.data(p.parameter.slice(1)); else this.log('(datos de listado fuera de sesión)'); return; }
+      if (p.opcode === OP.FILE_BROWSE_STOP) { this.log('RX fin de listado, motivo=' + (p.parameter[0] ?? 0)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
+      if (!t?.active) { this.log('RX comando 0x' + p.opcode.toString(16) + ' fuera de transferencia: ' + hx(p.parameter, 40)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
       if (p.opcode === OP.FILE_READ) {
         const a = p.parameter;
         if (a.length < 7 || a[0] !== 0 || this.packetSize < 1 || this.packetSize > 8192) throw new Error('Solicitud de lectura inválida o recibida antes de negociar.');

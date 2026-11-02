@@ -267,6 +267,8 @@ dialog{border:0;border-radius:18px;padding:24px;max-width:460px;width:calc(100vw
         <article class="card wide"><div class="section-head"><div><div class="eyebrow">ARCHIVOS EN EL BADGE</div><h2 id="deviceFilesTitle">Contenido guardado</h2></div><div class="row"><button class="btn small" id="refreshFiles"><svg><use href="#i-refresh"/></svg>Actualizar</button><button class="btn small danger" id="deleteAllFiles" hidden>Borrar todo</button></div></div>
           <p class="help">Listado por RCSP 0x0C (igual que la app oficial). Borrado por clúster (0x1F) con respaldo por nombre (0x23). Las miniaturas aparecen para los archivos enviados desde este estudio.</p>
           <div class="file-grid" id="deviceFiles"></div><div class="empty small" id="deviceFilesEmpty"><p>Conectá el badge y tocá Actualizar para ver sus archivos.</p></div>
+          <div class="field"><label>Borrar por nombre</label><div class="row"><input type="text" id="deleteByName" placeholder="BADGE001.AVI" maxlength="12" spellcheck="false" style="max-width:220px"><button class="btn small danger" id="deleteByNameBtn">Borrar (0x23)</button></div><p class="help">Si el listado no muestra el archivo pero conocés su nombre (aparece en la pantalla del badge), borralo por nombre.</p></div>
+          <div class="field"><label>Vaciar el badge</label><div class="row"><button class="btn small danger" id="formatStorage">Formatear almacenamiento (0x22)</button></div><p class="help">Borra todo el contenido del almacenamiento de medios del badge (SD1). Es el mismo comando "formatear" del SDK de Jieli; pide doble confirmación y no se puede deshacer.</p></div>
         </article>
         <article class="card wide"><div class="section-head"><div class="eyebrow">REGISTRO</div><div class="row"><button class="btn small" id="copyLog"><svg><use href="#i-copy"/></svg>Copiar</button><button class="btn small" id="downloadLog">Descargar</button><button class="btn small" id="clearLog">Limpiar</button></div></div><pre class="log" id="log"></pre></article>
       </div>
@@ -1449,32 +1451,42 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
       this.brightness = value; this.emit();
     }
 
-    /* ---- file browsing & deletion (Jieli SDK semantics) ---- */
-    async browseFiles({ type = 1, pageSize = 20, devHandler = null, clusters = [0], maxEntries = 200 } = {}) {
+    /* ---- file browsing & deletion (Jieli SDK semantics) ----
+       PathData.type describes the node being opened (0 = folder, 1 = file), not a filter:
+       the root is a folder, so the listing starts with type 0 and clusters [0]. Entries arrive
+       as DATA frames (first byte 0x0C) and the badge closes with 0x0D. Folders found at the
+       root are opened one level deeper with clusters [0, cluster]. */
+    async browseFiles({ pageSize = 20, devHandler = null, maxEntries = 300, depth = 2 } = {}) {
       if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
       if (this.storage === null) await this.queryStorage();
       const handle = devHandler ?? this.storage;
-      const all = [];
-      let start = 1, total = Infinity;
-      while (all.length < Math.min(total, maxEntries)) {
-        const page = await this.browsePage(type, pageSize, start, handle, clusters);
-        total = page.total || total;
-        all.push(...page.entries);
-        if (!page.entries.length || page.entries.length < pageSize) break;
-        start += page.entries.length;
-      }
+      const walk = async (clusters, level, path) => {
+        const out = []; let start = 1;
+        for (;;) {
+          const page = await this.browsePage(0, pageSize, start, handle, clusters);
+          out.push(...page.entries.map((e) => ({ ...e, path, clusters })));
+          if (!page.entries.length || page.entries.length < pageSize || out.length >= maxEntries) break;
+          start += page.entries.length;
+        }
+        const files = out.filter((e) => e.isFile), folders = out.filter((e) => !e.isFile);
+        if (level < depth) for (const f of folders.slice(0, 12)) { try { files.push(...await walk(clusters.concat(f.cluster), level + 1, (path ? path + '/' : '') + f.name)); } catch (e) { this.log('Carpeta ' + f.name + ': ' + e.message); } }
+        if (level === 0) files.push(...folders.map((f) => ({ ...f, path: '' })));
+        return files;
+      };
+      const all = await walk([0], 0, '');
       this.files = all.map((e) => ({ ...e, device: this.storageName || 'SD1', handle }));
-      this.log('Archivos en el badge: ' + this.files.length + (Number.isFinite(total) ? ' de ' + total : ''));
+      this.log('Archivos en el badge: ' + this.files.filter((f) => f.isFile).length + ' archivos, ' + this.files.filter((f) => !f.isFile).length + ' carpetas');
       this.emit(); return this.files;
     }
     browsePage(type, readNum, startIndex, handle, clusters) {
       return new Promise((resolve, reject) => {
-        const chunks = []; let total = 0;
-        const finish = (err) => { clearTimeout(this.browseTimer); this.browse = null; if (err) reject(err); else resolve({ total, entries: R.parseFileStructs(concat(...chunks)) }); };
-        this.browse = { data: (d) => { chunks.push(d); clearTimeout(this.browseTimer); this.browseTimer = setTimeout(() => finish(), 1500); }, stop: (reason) => { if (reason === 0 || reason === 1) finish(); else finish(new Error('El badge interrumpió el listado (código ' + reason + ').')); } };
-        this.browseTimer = setTimeout(() => finish(), 6000);
+        const chunks = []; let total = null, done = false;
+        const finish = (err) => { if (done) return; done = true; clearTimeout(this.browseTimer); this.browse = null; if (err) reject(err); else { const entries = R.parseFileStructs(concat(...chunks)); this.log('Listado [' + clusters.join('/') + '] desde ' + startIndex + ': ' + entries.length + ' entradas' + (total !== null ? ' de ' + total : '') + ' · ' + entries.map((e) => (e.isFile ? '' : '[DIR] ') + e.name).join(', ')); resolve({ total, entries }); } };
+        const idle = (ms) => { clearTimeout(this.browseTimer); this.browseTimer = setTimeout(() => finish(), ms); };
+        this.browse = { data: (d) => { chunks.push(d); idle(1500); }, stop: (reason) => { if (reason === 0 || reason === 1) setTimeout(() => finish(), 50); else finish(new Error('El badge interrumpió el listado (código ' + reason + ').')); } };
+        idle(6000);
         this.request(OP.FILE_BROWSE, R.fileBrowseParam(type, readNum, startIndex, handle, clusters), 8000)
-          .then((p) => { total = R.parseBrowseTotal(p); if (!total) finish(); })
+          .then((p) => { total = p.length ? R.parseBrowseTotal(p) : null; if (total === 0) idle(400); else idle(2500); })
           .catch((e) => finish(e.status === 2 ? new Error('Este badge no soporta el listado de archivos (NOT_SUPPORTED).') : e));
       });
     }
@@ -1483,11 +1495,20 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
       if (!entry) throw new Error('Elegí un archivo.');
       if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
       if (entry.cluster !== undefined && entry.handle !== undefined) {
-        const r = await this.tryRequest(OP.FILE_DELETE, R.deleteByClusterParam(entry.handle, entry.isFile !== false, entry.cluster, true), 10000);
+        const r = await this.tryRequest(OP.FILE_DELETE, R.deleteByClusterParam(entry.handle, entry.isFile !== false, entry.cluster, true), 15000);
         if (r.status === 0) { this.log('Eliminado ' + entry.name + ' (clúster ' + entry.cluster + ')'); this.files = this.files.filter((f) => f !== entry); this.emit(); return true; }
         this.log('Borrado por clúster rechazado (' + (R.STATUS_NAMES[r.status] || r.status) + '); se intenta por nombre.');
       }
       return this.deleteFileByName(entry.name);
+    }
+    /* 0x22 DEVICE_FORMAT [devHandle BE32]: wipes the whole media storage. Only on explicit request. */
+    async formatStorage() {
+      if (this.transfer?.active) throw new Error('Esperá que termine la transferencia.');
+      if (this.storage === null) await this.queryStorage();
+      const r = await this.tryRequest(OP.DEVICE_FORMAT, u32be(this.storage), 60000);
+      const reason = r.parameter[0] ?? 0;
+      if (r.status !== 0 || reason !== 0) throw new Error('El badge no formateó (' + (R.STATUS_NAMES[r.status] || r.status) + ', motivo ' + reason + ').');
+      this.log('Almacenamiento ' + this.storageName + ' formateado.'); this.files = []; this.emit(); return true;
     }
     async deleteFileByName(name) {
       const r = await this.tryRequest(OP.ONE_FILE_DELETE, R.deleteByNameParam(name), 10000);
@@ -1505,7 +1526,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
       await run('Almacenamiento SD1', () => this.queryStorage().then((h) => '0x' + h.toString(16)));
       await run('Batería', () => this.refreshBattery().then((b) => (b.level ?? '?') + ' %' + (b.charging ? ' (cargando)' : '')));
       if (this.control) await run('Pantalla (Qix 0xC6)', () => this.queryScreen().then((s) => s.width + '×' + s.height + ' · imagen ' + s.pictureWidth + '×' + s.pictureHeight));
-      await run('Archivos (0x0C)', () => this.browseFiles().then((f) => f.length + ' entradas'));
+      await run('Archivos (0x0C)', () => this.browseFiles().then((f) => f.filter((x) => x.isFile).length + ' archivos'));
       return steps;
     }
 
@@ -1540,9 +1561,9 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     }
     async handleCommand(p) {
       const t = this.transfer;
-      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.browse?.data(p.parameter.slice(1)); return; }
-      if (p.opcode === OP.FILE_BROWSE_STOP) { if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
-      if (!t?.active) { this.log('Comando 0x' + p.opcode.toString(16) + ' fuera de transferencia.'); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
+      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.log('RX listado ' + hx(p.parameter.slice(1), 48)); if (this.browse) this.browse.data(p.parameter.slice(1)); else this.log('(datos de listado fuera de sesión)'); return; }
+      if (p.opcode === OP.FILE_BROWSE_STOP) { this.log('RX fin de listado, motivo=' + (p.parameter[0] ?? 0)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
+      if (!t?.active) { this.log('RX comando 0x' + p.opcode.toString(16) + ' fuera de transferencia: ' + hx(p.parameter, 40)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
       if (p.opcode === OP.FILE_READ) {
         const a = p.parameter;
         if (a.length < 7 || a[0] !== 0 || this.packetSize < 1 || this.packetSize > 8192) throw new Error('Solicitud de lectura inválida o recibida antes de negociar.');
@@ -2921,9 +2942,9 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     $('screenStatus').textContent = c.screen ? c.screen.width + ' × ' + c.screen.height : '—'; $('deviceInfoText').textContent = c.info;
     if (c.brightness !== null) { $('brightness').value = c.brightness; $('brightnessOut').textContent = c.brightness + ' %'; }
     $('authBtn').disabled = !c.tx || ['authenticating', 'ready'].includes(c.state) || !!c.transfer?.active;
-    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime']) $(id).disabled = !c.ready || !!c.transfer?.active;
+    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage']) $(id).disabled = !c.ready || !!c.transfer?.active;
     $$('[data-lang]').forEach((b) => { b.disabled = !c.ready; }); $('disconnectBtn').disabled = !c.connected; $('cancelTransfer').disabled = !c.transfer?.active;
-    $('homeDeviceName').textContent = c.ready ? name : 'Sin badge conectado'; $('homeDeviceMeta').textContent = c.ready ? 'Perfil ' + c.profile + ' · autenticado · ' + (c.txProps || '') : 'Conectá por Bluetooth para ver batería, archivos y enviar contenido.'; $('homeStats').hidden = !c.ready; $('homeBattery').textContent = c.battery === null ? '—' : c.battery + '%'; $('homeFiles').textContent = c.files.length || '—'; $('homeStorage').textContent = c.storageName || '—';
+    $('homeDeviceName').textContent = c.ready ? name : 'Sin badge conectado'; $('homeDeviceMeta').textContent = c.ready ? 'Perfil ' + c.profile + ' · autenticado · ' + (c.txProps || '') : 'Conectá por Bluetooth para ver batería, archivos y enviar contenido.'; $('homeStats').hidden = !c.ready; $('homeBattery').textContent = c.battery === null ? '—' : c.battery + '%'; $('homeFiles').textContent = c.files.filter((f) => f.isFile).length || '—'; $('homeStorage').textContent = c.storageName || '—';
     $('deviceFileCount').hidden = !c.files.length; $('deviceFileCount').textContent = c.files.length; $('deleteAllFiles').hidden = !c.files.length;
     renderDeviceFiles(); updateShelf(); syncExport();
   }
@@ -2945,9 +2966,11 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
   async function refreshDeviceFiles() { if (!client.ready) throw new Error('Conectá el badge primero.'); const t = await BS.db.thumbs.all().catch(() => []); thumbCache = Object.fromEntries(t.map((x) => [x.name, x])); await client.browseFiles(); renderDeviceFiles(); }
   function renderDeviceFiles() {
     const files = client.files; $('deviceFilesEmpty').hidden = files.length > 0; $('deviceFilesTitle').textContent = files.length ? files.length + ' archivos en ' + (client.storageName || 'el badge') : 'Contenido guardado';
-    $('deviceFiles').innerHTML = files.map((f, i) => { const th = thumbCache[f.name]; return '<div class="file-card"><div class="thumb">' + (th ? '<img src="' + esc(th.thumb) + '" alt="">' : esc((f.name.split('.').pop() || '').toUpperCase())) + '</div><strong>' + esc(f.name) + '</strong><small>' + (th ? esc(th.meta) : 'clúster ' + f.cluster + (f.isFile ? '' : ' · carpeta')) + '</small><div class="row"><button class="btn small danger" data-delete-file="' + i + '">' + icon('trash') + 'Borrar</button></div></div>'; }).join('');
+    $('deviceFiles').innerHTML = files.map((f, i) => { const th = thumbCache[f.name]; return '<div class="file-card"><div class="thumb">' + (th ? '<img src="' + esc(th.thumb) + '" alt="">' : esc(f.isFile ? (f.name.split('.').pop() || '').toUpperCase() : 'CARPETA')) + '</div><strong>' + esc((f.path ? f.path + '/' : '') + f.name) + '</strong><small>' + (th ? esc(th.meta) : 'clúster ' + f.cluster + (f.isFile ? '' : ' · carpeta')) + '</small><div class="row"><button class="btn small danger" data-delete-file="' + i + '">' + icon('trash') + 'Borrar</button></div></div>'; }).join('');
   }
   async function deleteDeviceFile(i) { const f = client.files[i]; if (!f) return; if (!confirm('¿Borrar «' + f.name + '» del badge? No se puede deshacer.')) return; await client.deleteFile(f); toast('Borrado ' + f.name + '.'); await BS.db.thumbs.remove(f.name).catch(() => {}); renderDeviceFiles(); updateConnection(client); }
+  async function deleteByNameUI() { const name = sanitizeName($('deleteByName').value); if (!$('deleteByName').value.trim()) throw new Error('Escribí el nombre del archivo.'); if (!confirm('¿Borrar «' + name + '» del badge?')) return; await client.deleteFileByName(name); toast('Borrado ' + name + '.'); await BS.db.thumbs.remove(name).catch(() => {}); await refreshDeviceFiles().catch(() => {}); }
+  async function formatStorageUI() { if (!confirm('Esto borra TODO el contenido del badge (' + (client.storageName || 'SD1') + '). ¿Continuar?')) return; if (prompt('Escribí BORRAR para confirmar el formateo:') !== 'BORRAR') { toast('Formateo cancelado.'); return; } await client.formatStorage(); await BS.db.thumbs.clear().catch(() => {}); toast('Almacenamiento formateado.'); await refreshDeviceFiles().catch(() => {}); }
   async function deleteAllFiles() { if (!client.files.length || !confirm('¿Borrar los ' + client.files.length + ' archivos del badge? No se puede deshacer.')) return; for (const f of client.files.slice()) { try { await client.deleteFile(f); await BS.db.thumbs.remove(f.name).catch(() => {}); } catch (e) { log('No se borró ' + f.name + ': ' + e.message); } } toast('Listo.'); await refreshDeviceFiles().catch(() => {}); }
   async function runDiagnostics() { const box = $('diagResult'); box.hidden = false; box.innerHTML = '<div>Ejecutando…</div>'; const steps = await client.diagnostics(); box.innerHTML = steps.map((s) => '<div><span>' + esc(s.name) + '</span><span class="' + (s.ok ? 'ok' : 'fail') + '">' + esc(String(s.value)) + ' · ' + s.ms + ' ms</span></div>').join(''); }
 
@@ -2979,6 +3002,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     $('connectBtn').onclick = action(() => connectBadge()); $('homeConnect').onclick = action(() => connectBadge()); $('deviceConnect').onclick = action(async () => { if (client.connected) client.disconnect(); await connectBadge(); });
     $('authBtn').onclick = action(() => client.authenticate()); $('disconnectBtn').onclick = () => client.disconnect(); $('infoBtn').onclick = action(() => client.queryInfo()); $('storageBtn').onclick = action(() => client.queryStorage()); $('batteryBtn').onclick = action(async () => { const b = await client.refreshBattery(); toast('Batería: ' + (b.level ?? '?') + ' %'); });
     $('diagBtn').onclick = action(runDiagnostics); $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
+    $('deleteByNameBtn').onclick = action(deleteByNameUI); $('formatStorage').onclick = action(formatStorageUI);
     $('deviceFiles').onclick = action((e) => { const b = e.target.closest('[data-delete-file]'); if (b) return deleteDeviceFile(+b.dataset.deleteFile); });
     $('brightness').oninput = (e) => { $('brightnessOut').textContent = e.target.value + ' %'; }; $('brightnessApply').onclick = action(async () => { await client.setBrightness(+$('brightness').value); toast('Brillo aplicado.'); });
     $$('[data-lang]').forEach((b) => { b.onclick = action(async () => { await client.setLanguage(b.dataset.lang); toast('Idioma enviado.'); }); }); $('syncTime').onclick = action(async () => { await client.syncTime(); toast('Hora enviada al badge.'); });

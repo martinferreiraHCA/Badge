@@ -54,7 +54,7 @@ respuesta: cuerpo = [estado, sn, parámetros…]   estado 0 OK · 1 error · 2 n
 | 0x1F | FILE_DELETE | `[último, devHandle BE32, tipo(1=archivo), clúster BE32]` |
 | 0x20 | FILE_RENAME | lo envía el badge: se responde con el nombre final (`ASCII\0\0` en E01, UTF-16LE en E87) |
 | 0x21 | ACTION_PREPARE | `[0]` antes de transferir |
-| 0x22 | DEVICE_FORMAT | **no se usa** (formatea el almacenamiento) |
+| 0x22 | DEVICE_FORMAT | `[devHandle BE32]` → `[motivo]`; vacía el almacenamiento de medios. Solo desde el botón «Formatear» con doble confirmación |
 | 0x23 | ONE_FILE_DELETE | `[0x00, nombre ASCII]` |
 | 0x27 | DEVICE_PARM_EXTRA | `[op (0 transferencia / 1 borrado), devHandle BE32, crc16?]` → `[…, 1]` si usa CRC por paquete |
 | 0x28 | SIMPLE_FILE_TRANS | archivos pequeños (carátulas); no se usa en badges |
@@ -83,9 +83,11 @@ CRC-16/XMODEM: polinomio 0x1021, init 0, sin reflexión (`"123456789"` → `0x31
 ### Listado de archivos (`PathData` del SDK Android)
 
 ```
-0x0C param: [tipo (0 carpetas / 1 archivos)][cantidad][inicio BE16 (desde 1)][devHandle BE32][pathLen BE16][clústeres BE32…]
-respuesta:  [estado, sn, total (1/2/4 bytes)]
+0x0C param: [tipo del nodo (0 carpeta / 1 archivo)][cantidad][inicio BE16 (desde 1)][devHandle BE32][pathLen BE16][clústeres BE32…]
+respuesta:  [estado, sn, total (1/2/4 bytes, el E01 lo omite)]
 ```
+
+`tipo` describe el nodo que se abre (`File.convertPathData`: `isFile() ? 1 : 0`), **no** es un filtro: la raíz es una carpeta, así que se pide `tipo=0` con `clústeres=[0]`; una subcarpeta se abre con `tipo=0` y `clústeres=[0, clúster]`. El E01 real responde `estado 0` sin total y luego manda las entradas.
 
 Las entradas **no** vienen en la respuesta: el badge las manda en tramas `0x01` cuyo primer byte de parámetro es `0x0C`, y termina con el comando `0x0D [motivo]`. Cada entrada (`FileStruct.parseData`):
 
@@ -98,7 +100,8 @@ nombre: UTF-16LE si unicode, GBK en caso contrario
 ### Borrado
 
 - Por clúster (`DelDevFileCmd` 0x1F): `[último(1), devHandle BE32, tipo(1 = archivo), clúster BE32]`.
-- Por nombre (`DeleteFileByNameCmd` 0x23): `[0x00, nombre ASCII]`. Es el respaldo si 0x1F responde con error.
+- Por nombre (`DeleteFileByNameCmd` 0x23): `[0x00, nombre ASCII]`. Es el respaldo si 0x1F responde con error, y lo que usa «Borrar por nombre».
+- Vaciar todo (`DeviceFormatCmd` 0x22): `[devHandle BE32]`; respuesta `[motivo]` (0 = OK).
 
 ## Canal Qix (0x9E) en FD02
 

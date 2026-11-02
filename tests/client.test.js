@@ -91,6 +91,21 @@ test('pages through long listings and deletes by cluster and by name', async () 
   await assert.rejects(client.browseFiles({ devHandler: 0x03000000 }), /RECHAZADO/);
 });
 
+test('lists files inside folders, copes with an empty total and formats the storage', async () => {
+  const badge = new SimBadge(), client = makeClient(badge);
+  await client.connect();
+  badge.emptyTotal = true; // the real E01 answers 0x0C with status 0 and no payload
+  badge.files = ['ROOT.AVI']; badge.folders = { 77: { name: 'MEDIA', files: ['IN001.AVI', 'IN002.AVI'] } };
+  const files = await client.browseFiles();
+  assert.deepEqual(files.filter((f) => f.isFile).map((f) => f.path + ':' + f.name), [':ROOT.AVI', 'MEDIA:IN001.AVI', 'MEDIA:IN002.AVI']);
+  assert.ok(badge.log.includes('browse 0/77 start=1 n=20'));
+  await client.deleteFile(files.find((f) => f.name === 'IN002.AVI'));
+  assert.deepEqual(badge.deleted, ['IN002.AVI']);
+  await client.formatStorage();
+  assert.deepEqual(badge.files, []);
+  assert.equal(client.files.length, 0);
+});
+
 test('uses the Qix side channel when present', async () => {
   const badge = new SimBadge({ qix: true, name: 'E87-ABC' }), client = makeClient(badge);
   await client.connect();

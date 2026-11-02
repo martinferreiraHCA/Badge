@@ -24,7 +24,7 @@ class SimBadge extends EventTarget {
   constructor({ name = 'E01-TEST', packetSize = 490, withCRC = true, window = 8, storageHandle = 0x02000000, qix = false, renameCollisions = 0 } = {}) {
     super();
     this.name = name; this.id = 'sim-' + name; this.packetSize = packetSize; this.withCRC = withCRC; this.window = window; this.storageHandle = storageHandle;
-    this.battery = 77; this.renameCollisions = renameCollisions; this.files = []; this.log = [];
+    this.battery = 77; this.renameCollisions = renameCollisions; this.files = []; this.folders = {}; this.emptyTotal = false; this.log = [];
     this.tx = new FakeCharacteristic(R.UUID.tx, { writeWithoutResponse: true }, this);
     this.rx = new FakeCharacteristic(R.UUID.rx, { notify: true }, this);
     this.level = new FakeCharacteristic(R.UUID.level, { read: true, notify: true }, this);
@@ -66,22 +66,29 @@ class SimBadge extends EventTarget {
       case R.OP.SYS_INFO_SET: this.brightness = p[3]; return this.reply(f, 0);
       case R.OP.FILE_BROWSE: {
         // param: [type][readNum][start BE16][dev BE32][pathLen BE16][clusters]
-        const readNum = p[1], start = (p[2] << 8) | p[3], dev = readU32BE(p, 4), pathLen = (p[8] << 9) | p[9];
-        if (dev !== this.storageHandle) return this.reply(f, 5);
-        this.log.push('browse start=' + start + ' n=' + readNum + ' pathLen=' + pathLen);
-        const slice = this.files.slice(start - 1, start - 1 + readNum);
-        this.reply(f, 0, [this.files.length]);
+        const type = p[0], readNum = p[1], start = (p[2] << 8) | p[3], dev = readU32BE(p, 4), pathLen = (p[8] << 8) | p[9];
+        const clusters = []; for (let i = 0; i < pathLen; i += 4) clusters.push(readU32BE(p, 10 + i));
+        if (dev !== this.storageHandle || type !== 0) return this.reply(f, 5);
+        this.log.push('browse ' + clusters.join('/') + ' start=' + start + ' n=' + readNum);
+        const inFolder = clusters.length > 1 ? this.folders[clusters[clusters.length - 1]] : null;
+        if (clusters.length > 1 && !inFolder) return this.reply(f, 3);
+        const names = inFolder ? inFolder.files : this.files;
+        const list = names.map((n, i) => ({ name: n, isFile: true, cluster: (inFolder ? 1000 : 100) + 1 + i })).concat(inFolder ? [] : Object.entries(this.folders).map(([c, fo]) => ({ name: fo.name, isFile: false, cluster: +c })));
+        const slice = list.slice(start - 1, start - 1 + readNum);
+        this.reply(f, 0, this.emptyTotal ? [] : [list.length]);
         setTimeout(() => {
-          const structs = slice.map((n, i) => { const raw = new TextEncoder().encode(n); return concat(new Uint8Array([1 | 2 | (2 << 2)]), BS.util.u32be(100 + start + i), new Uint8Array([0, 1]), new Uint8Array([raw.length]), raw); });
+          const structs = slice.map((e) => { const raw = new TextEncoder().encode(e.name); return concat(new Uint8Array([(e.isFile ? 1 : 0) | 2 | (2 << 2)]), BS.util.u32be(e.cluster), new Uint8Array([0, 1]), new Uint8Array([raw.length]), raw); });
           const data = concat(...structs);
           for (let o = 0; o < data.length; o += 40) this.send(R.commandFrame(R.OP.DATA, concat(new Uint8Array([R.OP.FILE_BROWSE]), data.slice(o, o + 40)), false, this.serial++ & 255));
           setTimeout(() => this.cmd(R.OP.FILE_BROWSE_STOP, [0]), 5);
         }, 2);
         return;
       }
+      case R.OP.DEVICE_FORMAT: { if (readU32BE(p, 0) !== this.storageHandle) return this.reply(f, 5); this.deleted = (this.deleted || []).concat(this.files.splice(0)); this.folders = {}; return this.reply(f, 0, [0]); }
       case R.OP.FILE_DELETE: {
         const dev = readU32BE(p, 1), cluster = readU32BE(p, 6);
         if (dev !== this.storageHandle) return this.reply(f, 5);
+        if (cluster > 1000) { const fo = Object.values(this.folders)[0]; const j = cluster - 1001; if (!fo || j >= fo.files.length) return this.reply(f, 3); this.deleted = (this.deleted || []).concat(fo.files.splice(j, 1)); return this.reply(f, 0); }
         const idx = cluster - 101; if (idx < 0 || idx >= this.files.length) return this.reply(f, 3);
         this.deleted = (this.deleted || []).concat(this.files.splice(idx, 1)); return this.reply(f, 0);
       }
