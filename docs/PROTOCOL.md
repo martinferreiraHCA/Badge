@@ -108,6 +108,12 @@ nombre: UTF-16LE si unicode, GBK en caso contrario
 
 `ReadFileFromDeviceCmd` 0x24 arranca la lectura por clúster o por nombre (nombre unicode = `"\\U"` + UTF-16LE + `00 00`). El badge responde con el tamaño y manda el contenido en tramas DATA `[0x24][offset BE32][crc16 BE si el dispositivo lo soporta][bytes]`, luego el comando `[0x80, ret]`. Para la vista previa se leen ~24 KB, se extrae el primer JPEG (`FF D8 … FF D9`) y se cancela con `[0x81, 0]`.
 
+Observado en el E01 real: el badge envía una ventana de 8 tramas (544 bytes de datos cada una, 4352 en total) y luego manda `[0x80, 0]` aunque falte archivo. Como el inicio acepta `offset`, el estudio vuelve a pedir desde el byte siguiente hasta completar. Queda pendiente capturar qué ACK envía Zrun entre ventanas.
+
+### Identificación del hardware
+
+`0x03` devuelve TLV con los `ATTR_TYPE_*` oficiales: 0 versión de protocolo, 2 dirección EDR, 3 plataforma, 5 versión, 6 `sdk_type` (tabla `JLChipFlag`: 13 = AC707N watch/badge), 7 uboot, 10 VID/PID, 11 auth key, 12 procode, 13 MTU, 17 dirección BLE. El E01 informa `sdk_type = 13`: chip AC707N / BR35, el mismo del E87.
+
 ## Canal Qix (0x9E) en FD02
 
 ```

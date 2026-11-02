@@ -467,7 +467,7 @@
     $('screenStatus').textContent = c.screen ? c.screen.width + ' × ' + c.screen.height : '—'; $('deviceInfoText').textContent = c.info;
     if (c.brightness !== null) { $('brightness').value = c.brightness; $('brightnessOut').textContent = c.brightness + ' %'; }
     $('authBtn').disabled = !c.tx || ['authenticating', 'ready'].includes(c.state) || !!c.transfer?.active;
-    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage', 'previewAll']) $(id).disabled = !c.ready || !!c.transfer?.active;
+    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage', 'previewAll', 'identifyBtn']) $(id).disabled = !c.ready || !!c.transfer?.active;
     $$('[data-lang]').forEach((b) => { b.disabled = !c.ready; }); $('disconnectBtn').disabled = !c.connected; $('cancelTransfer').disabled = !c.transfer?.active;
     $('homeDeviceName').textContent = c.ready ? name : 'Sin badge conectado'; $('homeDeviceMeta').textContent = c.ready ? 'Perfil ' + c.profile + ' · autenticado · ' + (c.txProps || '') : 'Conectá por Bluetooth para ver batería, archivos y enviar contenido.'; $('homeStats').hidden = !c.ready; $('homeBattery').textContent = c.battery === null ? '—' : c.battery + '%'; $('homeFiles').textContent = c.files.filter((f) => f.isFile).length || '—'; $('homeStorage').textContent = c.storageName || '—';
     $('deviceFileCount').hidden = !c.files.length; $('deviceFileCount').textContent = c.files.length; $('deleteAllFiles').hidden = !c.files.length;
@@ -520,6 +520,19 @@
   async function deleteByNameUI() { const name = sanitizeName($('deleteByName').value); if (!$('deleteByName').value.trim()) throw new Error('Escribí el nombre del archivo.'); if (!confirm('¿Borrar «' + name + '» del badge?')) return; await client.deleteFileByName(name); toast('Borrado ' + name + '.'); await BS.db.thumbs.remove(name).catch(() => {}); await refreshDeviceFiles().catch(() => {}); }
   async function formatStorageUI() { if (!confirm('Esto borra TODO el contenido del badge (' + (client.storageName || 'SD1') + '). ¿Continuar?')) return; if (prompt('Escribí BORRAR para confirmar el formateo:') !== 'BORRAR') { toast('Formateo cancelado.'); return; } await client.formatStorage(); await BS.db.thumbs.clear().catch(() => {}); toast('Almacenamiento formateado.'); await refreshDeviceFiles().catch(() => {}); }
   async function deleteAllFiles() { if (!client.files.length || !confirm('¿Borrar los ' + client.files.length + ' archivos del badge? No se puede deshacer.')) return; for (const f of client.files.slice()) { try { await client.deleteFile(f); await BS.db.thumbs.remove(f.name).catch(() => {}); } catch (e) { log('No se borró ' + f.name + ': ' + e.message); } } toast('Listo.'); await refreshDeviceFiles().catch(() => {}); }
+  let lastReport = null;
+  async function runIdentify() {
+    const box = $('identifyResult'); box.hidden = false; $('identifyText').textContent = 'Consultando el badge…';
+    const r = await client.identify(); lastReport = r;
+    const lines = ['Badge: ' + r.nombre + ' · perfil ' + r.perfil + (r.qix ? ' · canal Qix' : ''), 'Chip: ' + r.chip, '', r.conclusion, ''];
+    for (const [k, v] of Object.entries(r.info)) lines.push('  ' + k.padEnd(18) + ' ' + v);
+    if (r.pantalla) lines.push('', 'Pantalla: ' + r.pantalla.width + ' × ' + r.pantalla.height + ' px · imágenes ' + r.pantalla.pictureWidth + ' × ' + r.pantalla.pictureHeight + ' · memoria ' + r.pantalla.memory);
+    lines.push('Almacenamiento: ' + (r.almacenamiento.join(', ') || '—'), 'Batería: ' + (r.bateria?.level ?? '?') + ' %');
+    for (const [k, v] of Object.entries(r.sistema)) lines.push('  sys.' + k.padEnd(14) + ' ' + v);
+    lines.push('', 'Servicios GATT:'); for (const g of r.gatt) { lines.push('  ' + g.servicio); for (const c of g.caracteristicas) lines.push('     ' + c.uuid + '  ' + c.props); }
+    lines.push('', 'Referencia: https://github.com/ElectronicCats/jieli-ble-badge-research (AC707N / E87)');
+    $('identifyText').textContent = lines.join('\n');
+  }
   async function runDiagnostics() { const box = $('diagResult'); box.hidden = false; box.innerHTML = '<div>Ejecutando…</div>'; const steps = await client.diagnostics(); box.innerHTML = steps.map((s) => '<div><span>' + esc(s.name) + '</span><span class="' + (s.ok ? 'ok' : 'fail') + '">' + esc(String(s.value)) + ' · ' + s.ms + ' ms</span></div>').join(''); }
 
   /* ---------- events ---------- */
@@ -549,7 +562,9 @@
     $('giphyResults').onclick = action(async (e) => { const b = e.target.closest('[data-url]'); if (b) await fetchWeb(b.dataset.url); });
     $('connectBtn').onclick = action(() => connectBadge()); $('homeConnect').onclick = action(() => connectBadge()); $('deviceConnect').onclick = action(async () => { if (client.connected) client.disconnect(); await connectBadge(); });
     $('authBtn').onclick = action(() => client.authenticate()); $('disconnectBtn').onclick = () => client.disconnect(); $('infoBtn').onclick = action(() => client.queryInfo()); $('storageBtn').onclick = action(() => client.queryStorage()); $('batteryBtn').onclick = action(async () => { const b = await client.refreshBattery(); toast('Batería: ' + (b.level ?? '?') + ' %'); });
-    $('diagBtn').onclick = action(runDiagnostics); $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
+    $('diagBtn').onclick = action(runDiagnostics); $('identifyBtn').onclick = action(runIdentify);
+    $('identifyCopy').onclick = action(async () => { await navigator.clipboard.writeText($('identifyText').textContent); toast('Ficha copiada.'); });
+    $('identifyDownload').onclick = () => { if (lastReport) download(new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' }), 'badge-hardware.json'); }; $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
     $('deleteByNameBtn').onclick = action(deleteByNameUI); $('formatStorage').onclick = action(formatStorageUI);
     $('deviceFiles').onclick = action((e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.deleteFile) return deleteDeviceFile(+b.dataset.deleteFile); if (b.dataset.previewFile) return previewDeviceFile(+b.dataset.previewFile); if (b.dataset.downloadFile) return downloadDeviceFile(+b.dataset.downloadFile); });
     $('previewAll').onclick = action(previewAllFiles);

@@ -69,7 +69,10 @@
 
   /* 0x07 sys-info response: [function][len type data...]. Parses TLV attrs. */
   const SYSINFO_NAMES = { 0: 'battery', 1: 'volume', 2: 'eq', 3: 'mode', 4: 'file_pos', 5: 'fm', 6: 'rtc', 7: 'brightness', 8: 'storage', 9: 'play_state' };
-  const TARGET_NAMES = { 0: 'platform', 1: 'edr_profile', 2: 'mac', 3: 'name', 4: 'pid', 5: 'vid', 6: 'auth', 7: 'ble_only', 8: 'edr_status', 9: 'ble_status', 10: 'vid_pid', 11: 'version', 12: 'protocol', 13: 'mtu', 14: 'function_mask', 15: 'sdk_type', 16: 'ui_version', 17: 'double_connection', 18: 'peripherals', 19: 'dial_mask', 20: 'emitter', 21: 'alarm', 22: 'ota_mode', 23: 'watch_bg', 24: 'dial_bg', 31: 'customer' };
+  /* ATTR_TYPE_* from JL_rcsp_protocol.h (official) */
+  const TARGET_NAMES = { 0: 'protocol_version', 1: 'sys_info', 2: 'edr_addr', 3: 'platform', 4: 'function_info', 5: 'dev_version', 6: 'sdk_type', 7: 'uboot_version', 8: 'double_partition', 9: 'update_status', 10: 'vid_pid', 11: 'auth_key', 12: 'procode', 13: 'max_mtu', 14: 'function_mask', 15: 'sdk_type2', 16: 'ui_version', 17: 'ble_addr', 18: 'peripherals', 19: 'md5_game_support', 31: 'customer' };
+  /* JLChipFlag from the Android SDK: what sdk_type means */
+  const CHIP_FLAGS = { 0: 'AC692x AI soundbox', 1: 'AC692x soundbox', 2: 'AC693x TWS headset', 3: 'AC695x charging bin', 4: 'AC697x TWS headset', 5: 'AC696x soundbox', 6: 'AC696x TWS soundbox', 7: 'AC695x sound card', 8: 'AC695x watch', 9: 'AC701x watch', 10: 'earphone (manifest)', 11: 'soundbox (manifest)', 12: 'color-screen charging case', 13: 'AC707N watch / badge (BR35)', 14: 'dongle', 254: 'common SDK' };
   function parseTLV(payload, names) {
     const out = []; let i = 0;
     while (i < payload.length) {
@@ -85,9 +88,13 @@
   function decodeAttr(type, data, names) {
     if (!data.length) return '';
     if (names === TARGET_NAMES) {
-      if (type === 2 && data.length === 6) return Array.from(data, (b) => b.toString(16).padStart(2, '0')).join(':');
+      if ((type === 2 || type === 17) && data.length >= 6) return Array.from(data.slice(0, 6), (b) => b.toString(16).padStart(2, '0')).join(':') + (data.length > 6 ? ' +' + hx(data.slice(6)) : '');
       if (type === 10 && data.length >= 4) return 'vid=0x' + ((data[0] << 8) | data[1]).toString(16) + ' pid=0x' + ((data[2] << 8) | data[3]).toString(16);
       if (type === 13 && data.length >= 2) return 'mtu=' + ((data[0] << 8) | data[1]);
+      if (type === 6 && data.length === 1) return data[0] + ' = ' + (CHIP_FLAGS[data[0]] || 'desconocido');
+      if (type === 5 && data.length === 2) return data[0] + '.' + data[1];
+      if (type === 0 && data.length === 1) return 'v' + data[0];
+      if (type === 11) return hx(data);
     } else if (type === 0 && data.length === 1) return data[0] + '%';
     const a = ascii(data); if (a) return a;
     if (data.length === 1) return String(data[0]);
@@ -202,5 +209,5 @@
   }
   function timestampName(ext) { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()) + '.' + ext; }
 
-  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, readFileByClusterParam, readFileByNameParam, READ_CANCEL, parseReadStart, firstJpeg, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
+  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, CHIP_FLAGS, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, readFileByClusterParam, readFileByNameParam, READ_CANCEL, parseReadStart, firstJpeg, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
 })(typeof window !== 'undefined' ? window : globalThis);

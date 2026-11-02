@@ -59,8 +59,8 @@ test('queries info, storage, sys info, brightness and files', async () => {
   const badge = new SimBadge(), client = makeClient(badge);
   await client.connect();
   const attrs = await client.queryInfo();
-  assert.ok(attrs.find((a) => a.name === 'name' && a.decoded === 'E01'));
-  assert.ok(client.info.includes('mac: 01:02:03:04:05:06'));
+  assert.ok(attrs.find((a) => a.name === 'platform' && a.decoded === 'E01'));
+  assert.ok(client.info.includes('edr_addr: 01:02:03:04:05:06'));
   assert.equal(await client.queryStorage(), 0x02000000);
   const sys = await client.querySysInfo();
   assert.equal(client.brightness, 60);
@@ -154,4 +154,22 @@ test('reads files back: full download and first-frame preview with early cancel'
   assert.ok(badge.log.some((l) => l.startsWith('C 0x24')));
   const byName = await client.readFile({ name: 'LOOP.AVI' }, { maxBytes: 1000 });
   assert.ok(byName.data.length >= 490 && byName.data.length < avi.length);
+});
+
+test('continues a read from the offset where the E01 stops its 4352-byte window', async () => {
+  const badge = new SimBadge(), client = makeClient(badge);
+  badge.readWindow = 4352;
+  await client.connect();
+  const frame = BS.jpeg.encodeRGBA(new Uint8ClampedArray(368 * 368 * 4).fill(40), 368, 368, 75);
+  const avi = BS.avi.build([frame, frame, frame], 368, 368, 5);
+  badge.files = ['WIN.AVI']; badge.contents = { 'WIN.AVI': avi };
+  const files = await client.browseFiles();
+  const full = await client.readFile(files[0]);
+  assert.deepEqual(Array.from(full.data), Array.from(avi));
+  assert.ok(badge.log.filter((l) => l.startsWith('C 0x24')).length >= Math.ceil(avi.length / 4352));
+  const jpeg = await client.previewFile(files[0]);
+  assert.deepEqual(Array.from(jpeg), Array.from(frame));
+  const report = await client.identify();
+  assert.ok(report.gatt.length >= 2);
+  assert.equal(report.info.platform, 'E01');
 });

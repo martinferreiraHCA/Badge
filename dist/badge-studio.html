@@ -252,8 +252,9 @@ dialog{border:0;border-radius:18px;padding:24px;max-width:460px;width:calc(100vw
         <article class="card"><div class="eyebrow">ESTADO</div>
           <dl class="kv"><dt>Dispositivo</dt><dd id="deviceName">—</dd><dt>Perfil</dt><dd id="deviceProfile">—</dd><dt>Estado</dt><dd id="deviceStatus">Sin conexión</dd><dt>Autenticación</dt><dd id="authStatus">Pendiente</dd><dt>Batería</dt><dd id="batteryStatus">Sin lectura</dd><dt>Escritura</dt><dd id="writeStatus">—</dd><dt>Almacenamiento</dt><dd id="storageStatus">Por consultar</dd><dt>Paquete</dt><dd id="packetStatus">Sin negociar</dd><dt>Pantalla</dt><dd id="screenStatus">—</dd></dl>
           <p class="tiny" id="deviceInfoText"></p>
-          <div class="row"><button class="btn small" id="authBtn">Autenticar</button><button class="btn small" id="infoBtn">Info</button><button class="btn small" id="storageBtn">Almacenamiento</button><button class="btn small" id="batteryBtn">Batería</button><button class="btn small" id="diagBtn">Diagnóstico</button><button class="btn small danger" id="disconnectBtn">Desconectar</button></div>
+          <div class="row"><button class="btn small" id="authBtn">Autenticar</button><button class="btn small" id="infoBtn">Info</button><button class="btn small" id="storageBtn">Almacenamiento</button><button class="btn small" id="batteryBtn">Batería</button><button class="btn small" id="diagBtn">Diagnóstico</button><button class="btn small" id="identifyBtn">Identificar hardware</button><button class="btn small danger" id="disconnectBtn">Desconectar</button></div>
           <div class="diag" id="diagResult" hidden></div>
+          <div id="identifyResult" hidden><div class="eyebrow">FICHA DEL HARDWARE</div><pre class="log" id="identifyText"></pre><div class="row"><button class="btn small" id="identifyCopy"><svg><use href="#i-copy"/></svg>Copiar</button><button class="btn small" id="identifyDownload"><svg><use href="#i-download"/></svg>JSON</button></div></div>
         </article>
         <article class="card"><div class="eyebrow">AJUSTES DEL BADGE</div>
           <div class="field"><label>Brillo <output id="brightnessOut">—</output></label><input type="range" id="brightness" min="0" max="100" step="5" value="70"><button class="btn small" id="brightnessApply">Aplicar</button></div>
@@ -1030,7 +1031,10 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
 
   /* 0x07 sys-info response: [function][len type data...]. Parses TLV attrs. */
   const SYSINFO_NAMES = { 0: 'battery', 1: 'volume', 2: 'eq', 3: 'mode', 4: 'file_pos', 5: 'fm', 6: 'rtc', 7: 'brightness', 8: 'storage', 9: 'play_state' };
-  const TARGET_NAMES = { 0: 'platform', 1: 'edr_profile', 2: 'mac', 3: 'name', 4: 'pid', 5: 'vid', 6: 'auth', 7: 'ble_only', 8: 'edr_status', 9: 'ble_status', 10: 'vid_pid', 11: 'version', 12: 'protocol', 13: 'mtu', 14: 'function_mask', 15: 'sdk_type', 16: 'ui_version', 17: 'double_connection', 18: 'peripherals', 19: 'dial_mask', 20: 'emitter', 21: 'alarm', 22: 'ota_mode', 23: 'watch_bg', 24: 'dial_bg', 31: 'customer' };
+  /* ATTR_TYPE_* from JL_rcsp_protocol.h (official) */
+  const TARGET_NAMES = { 0: 'protocol_version', 1: 'sys_info', 2: 'edr_addr', 3: 'platform', 4: 'function_info', 5: 'dev_version', 6: 'sdk_type', 7: 'uboot_version', 8: 'double_partition', 9: 'update_status', 10: 'vid_pid', 11: 'auth_key', 12: 'procode', 13: 'max_mtu', 14: 'function_mask', 15: 'sdk_type2', 16: 'ui_version', 17: 'ble_addr', 18: 'peripherals', 19: 'md5_game_support', 31: 'customer' };
+  /* JLChipFlag from the Android SDK: what sdk_type means */
+  const CHIP_FLAGS = { 0: 'AC692x AI soundbox', 1: 'AC692x soundbox', 2: 'AC693x TWS headset', 3: 'AC695x charging bin', 4: 'AC697x TWS headset', 5: 'AC696x soundbox', 6: 'AC696x TWS soundbox', 7: 'AC695x sound card', 8: 'AC695x watch', 9: 'AC701x watch', 10: 'earphone (manifest)', 11: 'soundbox (manifest)', 12: 'color-screen charging case', 13: 'AC707N watch / badge (BR35)', 14: 'dongle', 254: 'common SDK' };
   function parseTLV(payload, names) {
     const out = []; let i = 0;
     while (i < payload.length) {
@@ -1046,9 +1050,13 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
   function decodeAttr(type, data, names) {
     if (!data.length) return '';
     if (names === TARGET_NAMES) {
-      if (type === 2 && data.length === 6) return Array.from(data, (b) => b.toString(16).padStart(2, '0')).join(':');
+      if ((type === 2 || type === 17) && data.length >= 6) return Array.from(data.slice(0, 6), (b) => b.toString(16).padStart(2, '0')).join(':') + (data.length > 6 ? ' +' + hx(data.slice(6)) : '');
       if (type === 10 && data.length >= 4) return 'vid=0x' + ((data[0] << 8) | data[1]).toString(16) + ' pid=0x' + ((data[2] << 8) | data[3]).toString(16);
       if (type === 13 && data.length >= 2) return 'mtu=' + ((data[0] << 8) | data[1]);
+      if (type === 6 && data.length === 1) return data[0] + ' = ' + (CHIP_FLAGS[data[0]] || 'desconocido');
+      if (type === 5 && data.length === 2) return data[0] + '.' + data[1];
+      if (type === 0 && data.length === 1) return 'v' + data[0];
+      if (type === 11) return hx(data);
     } else if (type === 0 && data.length === 1) return data[0] + '%';
     const a = ascii(data); if (a) return a;
     if (data.length === 1) return String(data[0]);
@@ -1163,7 +1171,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
   }
   function timestampName(ext) { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()) + '.' + ext; }
 
-  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, readFileByClusterParam, readFileByNameParam, READ_CANCEL, parseReadStart, firstJpeg, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
+  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, CHIP_FLAGS, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, readFileByClusterParam, readFileByNameParam, READ_CANCEL, parseReadStart, firstJpeg, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 /* ===== js/badge-client.js ===== */
@@ -1396,7 +1404,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     async queryInfo() {
       const p = await this.request(OP.TARGET_INFO, [255, 255, 255, 255, 0]);
       this.infoAttrs = R.parseTLV(p, R.TARGET_NAMES);
-      const text = this.infoAttrs.filter((a) => ['name', 'version', 'protocol', 'mac', 'mtu', 'sdk_type', 'ui_version', 'customer'].includes(a.name) && a.decoded).map((a) => a.name + ': ' + a.decoded);
+      const text = this.infoAttrs.filter((a) => ['platform', 'sdk_type', 'dev_version', 'uboot_version', 'protocol_version', 'edr_addr', 'ble_addr', 'max_mtu', 'vid_pid', 'procode', 'customer'].includes(a.name) && a.decoded).map((a) => a.name + ': ' + a.decoded);
       this.info = text.join(' · ') || Array.from(p, (b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ' ')).join('').split(/\s+/).filter((x) => x.length >= 4).join(' · ') || ('Respuesta recibida (' + p.length + ' bytes).');
       this.emit(); return this.infoAttrs;
     }
@@ -1533,27 +1541,41 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
       if (!this.ready) return Promise.reject(new Error('Conectá y autenticá el badge primero.'));
       if (this.transfer?.active || this.read) return Promise.reject(new Error('Esperá que termine la transferencia en curso.'));
       const handle = entry.handle ?? this.storage;
-      const param = entry.cluster !== undefined ? R.readFileByClusterParam(handle, entry.cluster, 0) : R.readFileByNameParam(handle, entry.name, !!entry.unicode, 0);
-      return new Promise((resolve, reject) => {
-        const chunks = []; let got = 0, size = 0, crcMode = null, done = false, cancelling = false;
-        const finish = (err) => { if (done) return; done = true; clearTimeout(this.readTimer); this.read = null; if (err) { this.log('Lectura de ' + entry.name + ': ' + err.message); reject(err); } else { const data = concat(...chunks); this.log('Leído ' + entry.name + ': ' + data.length + ' bytes' + (size ? ' de ' + size : '')); resolve({ data, size }); } };
-        const arm = (ms) => { clearTimeout(this.readTimer); this.readTimer = setTimeout(() => finish(cancelling ? null : new Error('El badge dejó de enviar datos.')), ms); };
-        const cancel = async () => { if (cancelling) return; cancelling = true; try { await this.tryRequest(OP.FILE_READ_BACK, R.READ_CANCEL(0), 3000); } catch { /* the badge may already have stopped */ } arm(600); };
+      const chunks = []; let got = 0, size = 0, crcMode = null, rounds = 0;
+      /* The E01 streams one window (8 frames, 4352 bytes) and then sends STOP ret=0; the official
+         start command accepts an offset, so the read continues from where it stopped. */
+      const round = () => new Promise((resolve, reject) => {
+        const param = entry.cluster !== undefined ? R.readFileByClusterParam(handle, entry.cluster, got) : R.readFileByNameParam(handle, entry.name, !!entry.unicode, got);
+        let done = false, cancelling = false, roundGot = 0;
+        const finish = (err) => { if (done) return; done = true; clearTimeout(this.readTimer); this.read = null; if (err) reject(err); else resolve({ cancelled: cancelling, roundGot }); };
+        const arm = (ms) => { clearTimeout(this.readTimer); this.readTimer = setTimeout(() => finish(cancelling || roundGot ? null : new Error('El badge no envió datos.')), ms); };
+        const cancel = async () => { if (cancelling) return; cancelling = true; try { await this.tryRequest(OP.FILE_READ_BACK, R.READ_CANCEL(0), 3000); } catch { /* may already be stopped */ } arm(600); };
         this.read = {
-          data: (p) => {
+          data: (p, frame) => {
             if (done || p.length < 4) return;
             const offset = readU32BE(p, 0); let body = p.slice(4);
-            if (crcMode === null) { const looksFile = (b) => (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46) || (b[0] === 0xff && b[1] === 0xd8); crcMode = body.length > 6 && !looksFile(body) && (looksFile(body.slice(2)) || crc16(body.slice(2)) === ((body[0] << 8) | body[1])); this.log('Lectura: ' + (crcMode ? 'con' : 'sin') + ' CRC por paquete'); }
+            if (crcMode === null) { const looksFile = (b) => (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46) || (b[0] === 0xff && b[1] === 0xd8); crcMode = body.length > 6 && !looksFile(body) && (looksFile(body.slice(2)) || crc16(body.slice(2)) === ((body[0] << 8) | body[1])); this.log('Lectura: ' + (crcMode ? 'con' : 'sin') + ' CRC por paquete · trama flag=0x' + frame.flag.toString(16) + ' · ' + p.length + ' bytes'); }
             if (crcMode) body = body.slice(2);
-            if (offset !== got) this.log('Lectura: desfase ' + offset + ' ≠ ' + got);
-            chunks.push(body); got += body.length; onProgress(got, size);
+            if (offset !== got) { this.log('Lectura: desfase ' + offset + ' ≠ ' + got + ' (se descarta)'); return; }
+            chunks.push(body); got += body.length; roundGot += body.length; onProgress(got, size);
             if (got >= maxBytes || (size && got >= size)) { if (size && got >= size) arm(1500); else cancel(); } else arm(4000);
           },
           stop: (ret) => { if (ret === 0 || cancelling) finish(); else finish(new Error('El badge interrumpió la lectura (código ' + ret + ').')); },
         };
         arm(timeout);
-        this.request(OP.FILE_READ_BACK, param, 10000).then((p) => { size = R.parseReadStart(p); this.log('Lectura de ' + entry.name + ': ' + size + ' bytes anunciados'); if (!size) arm(4000); }).catch((e) => finish(e.status === 2 ? new Error('Este badge no permite leer archivos (NOT_SUPPORTED).') : e));
+        this.request(OP.FILE_READ_BACK, param, 10000).then((p) => { if (!rounds) { size = R.parseReadStart(p); this.log('Lectura de ' + entry.name + ': ' + size + ' bytes anunciados'); } if (!size) arm(4000); }).catch((e) => finish(e.status === 2 ? new Error('Este badge no permite leer archivos (NOT_SUPPORTED).') : e));
       });
+      return (async () => {
+        for (;;) {
+          const r = await round(); rounds++;
+          const complete = (size && got >= size) || got >= maxBytes || r.cancelled;
+          if (complete || !r.roundGot || rounds > 400) break;
+          this.log('Lectura: el badge cortó en ' + got + ' de ' + size + '; se continúa desde ese offset.');
+        }
+        const data = concat(...chunks);
+        this.log('Leído ' + entry.name + ': ' + data.length + ' bytes' + (size ? ' de ' + size : '') + ' en ' + rounds + ' ronda(s)');
+        return { data, size };
+      })();
     }
     /* Reads just enough of an AVI/JPEG to extract its first frame. */
     async previewFile(entry) {
@@ -1592,6 +1614,27 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
       const r = await this.tryRequest(OP.ONE_FILE_DELETE, R.deleteByNameParam(name), 10000);
       if (r.status !== 0) throw new Error('El badge no borró ' + name + ' (' + (R.STATUS_NAMES[r.status] || r.status) + ').');
       this.log('Eliminado ' + name); this.files = this.files.filter((f) => f.name !== name); this.emit(); return true;
+    }
+
+    /* ---- hardware identification (no need to open the badge) ---- */
+    async identify() {
+      const report = { fecha: new Date().toISOString(), nombre: this.device?.name || '', id: this.device?.id || '', perfil: this.profile, gatt: [], info: {}, sistema: {}, pantalla: null, almacenamiento: [], bateria: null, qix: this.hasQix };
+      try {
+        const services = await this.device.gatt.getPrimaryServices();
+        for (const sv of services) { const chars = await sv.getCharacteristics().catch(() => []); report.gatt.push({ servicio: sv.uuid, caracteristicas: chars.map((c) => ({ uuid: c.uuid, props: Object.entries(c.properties).filter(([, v]) => v).map(([k]) => k).join(',') })) }); }
+      } catch (e) { report.gattError = e.message; }
+      try { for (const a of await this.queryInfo()) report.info[a.name] = a.decoded || a.hex; } catch (e) { report.infoError = e.message; }
+      try { for (const a of await this.querySysInfo()) report.sistema[a.name] = a.decoded || a.hex; } catch (e) { report.sysError = e.message; }
+      try { await this.queryStorage(); report.almacenamiento = this.storages.filter((x) => x.online).map((x) => x.name + '=0x' + (x.handle ?? 0).toString(16)); } catch (e) { report.storageError = e.message; }
+      if (this.control) { try { report.pantalla = await this.queryScreen(); } catch (e) { report.screenError = e.message; } }
+      try { report.bateria = await this.refreshBattery(); } catch { /* optional */ }
+      const sdk = this.infoAttrs.find((a) => a.type === 6);
+      report.chip = sdk ? (R.CHIP_FLAGS[sdk.data[0]] || 'sdk_type ' + sdk.data[0]) : 'desconocido';
+      report.conclusion = sdk && sdk.data[0] === 13
+        ? 'Chip JieLi AC707N (familia BR35), el mismo del E87 estudiado por ElectronicCats/jieli-ble-badge-research: pantalla 360×360 RGB565 por QSPI, táctil capacitivo, 4 MB de flash NOR, OTA por BLE documentada.'
+        : 'SDK ' + report.chip + '. Comparar con la tabla JLChipFlag del SDK de Jieli.';
+      this.log('Identificación: ' + report.chip + ' · ' + Object.keys(report.info).length + ' atributos');
+      return report;
     }
 
     /* ---- diagnostics ---- */
@@ -1640,7 +1683,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     async handleCommand(p) {
       const t = this.transfer;
       if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.log('RX listado ' + hx(p.parameter.slice(1), 48)); if (this.browse) this.browse.data(p.parameter.slice(1)); else this.log('(datos de listado fuera de sesión)'); return; }
-      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_READ_BACK) { if (p.needsReply) await this.write(R.responseFrame(OP.DATA, p.serial)); if (this.read) this.read.data(p.parameter.slice(1)); return; }
+      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_READ_BACK) { if (p.needsReply) { this.log('RX lectura: trama con respuesta requerida (flag 0x' + p.flag.toString(16) + ')'); await this.write(R.responseFrame(OP.DATA, p.serial)); } if (this.read) this.read.data(p.parameter.slice(1), p); return; }
       if (p.opcode === OP.FILE_READ_BACK) { const op = p.parameter[0], ret = p.parameter[1] ?? 0; this.log('RX lectura op=0x' + (op ?? 0).toString(16) + ' ret=' + ret); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); if (op === 0x80 || op === 0x81) this.read?.stop(op === 0x81 ? 0 : ret); return; }
       if (p.opcode === OP.FILE_BROWSE_STOP) { this.log('RX fin de listado, motivo=' + (p.parameter[0] ?? 0)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
       if (!t?.active) { this.log('RX comando 0x' + p.opcode.toString(16) + ' fuera de transferencia: ' + hx(p.parameter, 40)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
@@ -3022,7 +3065,7 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     $('screenStatus').textContent = c.screen ? c.screen.width + ' × ' + c.screen.height : '—'; $('deviceInfoText').textContent = c.info;
     if (c.brightness !== null) { $('brightness').value = c.brightness; $('brightnessOut').textContent = c.brightness + ' %'; }
     $('authBtn').disabled = !c.tx || ['authenticating', 'ready'].includes(c.state) || !!c.transfer?.active;
-    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage', 'previewAll']) $(id).disabled = !c.ready || !!c.transfer?.active;
+    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage', 'previewAll', 'identifyBtn']) $(id).disabled = !c.ready || !!c.transfer?.active;
     $$('[data-lang]').forEach((b) => { b.disabled = !c.ready; }); $('disconnectBtn').disabled = !c.connected; $('cancelTransfer').disabled = !c.transfer?.active;
     $('homeDeviceName').textContent = c.ready ? name : 'Sin badge conectado'; $('homeDeviceMeta').textContent = c.ready ? 'Perfil ' + c.profile + ' · autenticado · ' + (c.txProps || '') : 'Conectá por Bluetooth para ver batería, archivos y enviar contenido.'; $('homeStats').hidden = !c.ready; $('homeBattery').textContent = c.battery === null ? '—' : c.battery + '%'; $('homeFiles').textContent = c.files.filter((f) => f.isFile).length || '—'; $('homeStorage').textContent = c.storageName || '—';
     $('deviceFileCount').hidden = !c.files.length; $('deviceFileCount').textContent = c.files.length; $('deleteAllFiles').hidden = !c.files.length;
@@ -3075,6 +3118,19 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
   async function deleteByNameUI() { const name = sanitizeName($('deleteByName').value); if (!$('deleteByName').value.trim()) throw new Error('Escribí el nombre del archivo.'); if (!confirm('¿Borrar «' + name + '» del badge?')) return; await client.deleteFileByName(name); toast('Borrado ' + name + '.'); await BS.db.thumbs.remove(name).catch(() => {}); await refreshDeviceFiles().catch(() => {}); }
   async function formatStorageUI() { if (!confirm('Esto borra TODO el contenido del badge (' + (client.storageName || 'SD1') + '). ¿Continuar?')) return; if (prompt('Escribí BORRAR para confirmar el formateo:') !== 'BORRAR') { toast('Formateo cancelado.'); return; } await client.formatStorage(); await BS.db.thumbs.clear().catch(() => {}); toast('Almacenamiento formateado.'); await refreshDeviceFiles().catch(() => {}); }
   async function deleteAllFiles() { if (!client.files.length || !confirm('¿Borrar los ' + client.files.length + ' archivos del badge? No se puede deshacer.')) return; for (const f of client.files.slice()) { try { await client.deleteFile(f); await BS.db.thumbs.remove(f.name).catch(() => {}); } catch (e) { log('No se borró ' + f.name + ': ' + e.message); } } toast('Listo.'); await refreshDeviceFiles().catch(() => {}); }
+  let lastReport = null;
+  async function runIdentify() {
+    const box = $('identifyResult'); box.hidden = false; $('identifyText').textContent = 'Consultando el badge…';
+    const r = await client.identify(); lastReport = r;
+    const lines = ['Badge: ' + r.nombre + ' · perfil ' + r.perfil + (r.qix ? ' · canal Qix' : ''), 'Chip: ' + r.chip, '', r.conclusion, ''];
+    for (const [k, v] of Object.entries(r.info)) lines.push('  ' + k.padEnd(18) + ' ' + v);
+    if (r.pantalla) lines.push('', 'Pantalla: ' + r.pantalla.width + ' × ' + r.pantalla.height + ' px · imágenes ' + r.pantalla.pictureWidth + ' × ' + r.pantalla.pictureHeight + ' · memoria ' + r.pantalla.memory);
+    lines.push('Almacenamiento: ' + (r.almacenamiento.join(', ') || '—'), 'Batería: ' + (r.bateria?.level ?? '?') + ' %');
+    for (const [k, v] of Object.entries(r.sistema)) lines.push('  sys.' + k.padEnd(14) + ' ' + v);
+    lines.push('', 'Servicios GATT:'); for (const g of r.gatt) { lines.push('  ' + g.servicio); for (const c of g.caracteristicas) lines.push('     ' + c.uuid + '  ' + c.props); }
+    lines.push('', 'Referencia: https://github.com/ElectronicCats/jieli-ble-badge-research (AC707N / E87)');
+    $('identifyText').textContent = lines.join('\n');
+  }
   async function runDiagnostics() { const box = $('diagResult'); box.hidden = false; box.innerHTML = '<div>Ejecutando…</div>'; const steps = await client.diagnostics(); box.innerHTML = steps.map((s) => '<div><span>' + esc(s.name) + '</span><span class="' + (s.ok ? 'ok' : 'fail') + '">' + esc(String(s.value)) + ' · ' + s.ms + ' ms</span></div>').join(''); }
 
   /* ---------- events ---------- */
@@ -3104,7 +3160,9 @@ function encrypt16(input){return new Uint8Array(e1(MAGIC,Array.from(input),STATI
     $('giphyResults').onclick = action(async (e) => { const b = e.target.closest('[data-url]'); if (b) await fetchWeb(b.dataset.url); });
     $('connectBtn').onclick = action(() => connectBadge()); $('homeConnect').onclick = action(() => connectBadge()); $('deviceConnect').onclick = action(async () => { if (client.connected) client.disconnect(); await connectBadge(); });
     $('authBtn').onclick = action(() => client.authenticate()); $('disconnectBtn').onclick = () => client.disconnect(); $('infoBtn').onclick = action(() => client.queryInfo()); $('storageBtn').onclick = action(() => client.queryStorage()); $('batteryBtn').onclick = action(async () => { const b = await client.refreshBattery(); toast('Batería: ' + (b.level ?? '?') + ' %'); });
-    $('diagBtn').onclick = action(runDiagnostics); $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
+    $('diagBtn').onclick = action(runDiagnostics); $('identifyBtn').onclick = action(runIdentify);
+    $('identifyCopy').onclick = action(async () => { await navigator.clipboard.writeText($('identifyText').textContent); toast('Ficha copiada.'); });
+    $('identifyDownload').onclick = () => { if (lastReport) download(new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' }), 'badge-hardware.json'); }; $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
     $('deleteByNameBtn').onclick = action(deleteByNameUI); $('formatStorage').onclick = action(formatStorageUI);
     $('deviceFiles').onclick = action((e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.deleteFile) return deleteDeviceFile(+b.dataset.deleteFile); if (b.dataset.previewFile) return previewDeviceFile(+b.dataset.previewFile); if (b.dataset.downloadFile) return downloadDeviceFile(+b.dataset.downloadFile); });
     $('previewAll').onclick = action(previewAllFiles);

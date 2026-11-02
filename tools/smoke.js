@@ -112,6 +112,8 @@ const { chromium } = require('playwright');
     await page2.waitForFunction(() => document.querySelectorAll('#deviceFiles .thumb img').length === 1, null, { timeout: 30000 });
     console.log('Simulado: vista previa leída del badge OK');
     await page2.screenshot({ path: path.join(shots, '11-device-connected.png') });
+    await page2.click('#identifyBtn'); await page2.waitForFunction(() => /Chip:/.test(document.getElementById('identifyText').textContent), null, { timeout: 20000 });
+    console.log('Simulado: ficha de hardware generada');
     await page2.click('#diagBtn'); await page2.waitForFunction(() => document.querySelectorAll('#diagResult div').length >= 5, null, { timeout: 20000 });
     await page2.screenshot({ path: path.join(shots, '12-device-diagnostics.png') });
     await page2.close();

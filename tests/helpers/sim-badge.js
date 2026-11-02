@@ -32,7 +32,7 @@ class SimBadge extends EventTarget {
     if (qix) { this.control = new FakeCharacteristic(R.UUID.qixControl, { writeWithoutResponse: true }, this); this.qixNotify = new FakeCharacteristic(R.UUID.qixNotify[0], { notify: true }, this); this.services.push(new FakeService(R.UUID.qixService, [this.control, this.qixNotify])); }
     this.parser = new R.Parser(); this.auth = 'idle'; this.serial = 0; this.transfer = null; this.inbound = [];
     const badge = this;
-    this.gatt = { connected: false, async connect() { this.connected = true; return this; }, disconnect() { this.connected = false; badge.dispatchEvent(new Event('gattserverdisconnected')); }, async getPrimaryService(uuid) { const s = badge.services.find((x) => x.uuid === uuid); if (!s) { const e = new Error('No service ' + uuid); e.name = 'NotFoundError'; throw e; } return s; } };
+    this.gatt = { connected: false, async connect() { this.connected = true; return this; }, disconnect() { this.connected = false; badge.dispatchEvent(new Event('gattserverdisconnected')); }, async getPrimaryService(uuid) { const s = badge.services.find((x) => x.uuid === uuid); if (!s) { const e = new Error('No service ' + uuid); e.name = 'NotFoundError'; throw e; } return s; }, async getPrimaryServices() { return badge.services; } };
   }
   send(bytes) { setTimeout(() => this.rx.notify(bytes), 0); }
   cmd(op, params, needReply = true) { const sn = this.serial++ & 255; this.send(R.commandFrame(op, params, needReply, sn)); return sn; }
@@ -87,14 +87,14 @@ class SimBadge extends EventTarget {
       case R.OP.FILE_READ_BACK: {
         const op = p[0];
         if (op === 0x81) { this.reply(f, 0); if (this.reading) { this.reading.cancelled = true; setTimeout(() => this.cmd(R.OP.FILE_READ_BACK, [0x80, 0]), 2); } return; }
-        let name = null;
-        if (op === 1) { const cluster = readU32BE(p, 9); const idx = cluster - 101; name = this.files[idx]; }
-        else if (op === 2) { name = new TextDecoder().decode(p.slice(10)).replace(/\0+$/, ''); }
+        let name = null, start = 0;
+        if (op === 1) { const cluster = readU32BE(p, 9); start = readU32BE(p, 5); const idx = cluster - 101; name = this.files[idx]; }
+        else if (op === 2) { start = readU32BE(p, 5); name = new TextDecoder().decode(p.slice(10)).replace(/\0+$/, ''); }
         const data = name && this.contents && this.contents[name];
         if (!data) return this.reply(f, 3);
         this.reply(f, 0, concat(new Uint8Array([op]), BS.util.u32be(data.length)));
-        const r = this.reading = { cancelled: false }; let off = 0;
-        const pump = () => { if (r.cancelled) return; if (off >= data.length) { this.reading = null; this.cmd(R.OP.FILE_READ_BACK, [0x80, 0]); return; } const part = data.slice(off, off + 490), c = crc16(part); this.send(R.commandFrame(R.OP.DATA, concat(new Uint8Array([R.OP.FILE_READ_BACK]), BS.util.u32be(off), new Uint8Array([c >> 8, c & 255]), part), false, this.serial++ & 255)); off += part.length; setTimeout(pump, 1); };
+        const r = this.reading = { cancelled: false }; let off = start; const windowEnd = this.readWindow ? start + this.readWindow : Infinity;
+        const pump = () => { if (r.cancelled) return; if (off >= data.length || off >= windowEnd) { this.reading = null; this.cmd(R.OP.FILE_READ_BACK, [0x80, 0]); return; } const part = data.slice(off, Math.min(off + 544, windowEnd)), c = crc16(part); this.send(R.commandFrame(R.OP.DATA, concat(new Uint8Array([R.OP.FILE_READ_BACK]), BS.util.u32be(off), new Uint8Array([c >> 8, c & 255]), part), false, this.serial++ & 255)); off += part.length; setTimeout(pump, 1); };
         setTimeout(pump, 2);
         return;
       }
