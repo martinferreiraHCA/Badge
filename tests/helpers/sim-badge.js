@@ -142,7 +142,7 @@ class SimBadge extends EventTarget {
     const respond = (cmd, payload) => setTimeout(() => this.qixNotify.notify(R.qixFrame(cmd, payload, 0x01)), 0);
     if (q.cmd === R.QIX.BATTERY_REQ) respond(R.QIX.BATTERY_RET, [1, this.battery]);
     else if (q.cmd === R.QIX.SCREEN_REQ) respond(R.QIX.SCREEN_RET, [1, 0x70, 0x01, 0x70, 0x01, 0x70, 0x01, 0x70, 0x01, 0, 0, 0x0e, 0]);
-    else if (q.cmd === R.QIX.SETTING) { this.brightness = q.payload[3]; respond(R.QIX.SETTING, [0]); }
+    else if (q.cmd === R.QIX.SETTING) { this.brightness = q.payload[3]; respond(0xff, [R.QIX.SETTING, 0]); }
   }
 }
 class FakeBluetooth { constructor(badge) { this.badge = badge; } async requestDevice() { return this.badge; } async getDevices() { return [this.badge]; } }

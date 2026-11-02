@@ -121,6 +121,7 @@
           }
         }
         this.log(this.control ? 'Canal Qix (FD02) disponible: batería, pantalla, brillo, idioma y hora.' : 'Servicio Qix sin característica de control.');
+        if (this.control) this.qixBootstrapped = false;
       } catch { this.log('Canal Qix no expuesto por este badge (normal en E01).'); }
     }
     disconnected() {
@@ -249,12 +250,12 @@
     async queryFeatureMap() { const r = await this.tryRequest(OP.FEATURE_MAP, []); return r.status === 0 && r.parameter.length >= 4 ? readU32BE(r.parameter) : null; }
 
     /* ---- Qix side channel ---- */
-    qixRequest(cmd, payload, responseCmd, timeout = 5000) {
+    qixRequest(cmd, payload, responseCmd, timeout = 5000, ackOk = false) {
       if (!this.control) return Promise.reject(new Error('Este badge no expone el canal Qix (FD02).'));
       const seq = this.qixSerial = (this.qixSerial + 1) & 15, flag = ((seq & 15) << 3) | 0x02;
       const frame = R.qixFrame(cmd, payload, flag);
       return new Promise((resolve, reject) => {
-        const waiter = { responseCmd, resolve, reject, timer: setTimeout(() => { this.qixWaiters = this.qixWaiters.filter((w) => w !== waiter); reject(new Error('Sin respuesta Qix a 0x' + cmd.toString(16))); }, timeout) };
+        const waiter = { cmd, responseCmd, ackOk, resolve, reject, timer: setTimeout(() => { this.qixWaiters = this.qixWaiters.filter((w) => w !== waiter); reject(new Error('Sin respuesta Qix a 0x' + cmd.toString(16))); }, timeout) };
         this.qixWaiters.push(waiter);
         this.write(frame, false, this.control).catch((e) => { clearTimeout(waiter.timer); this.qixWaiters = this.qixWaiters.filter((w) => w !== waiter); reject(e); });
       });
@@ -262,14 +263,22 @@
     receiveQix(raw) {
       this.lastActivity = Date.now();
       const q = R.parseQix(raw);
-      this.log('RX Qix ' + hx(raw, 40));
-      if (!q) return;
+      if (!q) { this.log('RX Qix (sin parsear) ' + hx(raw, 40)); return; }
+      this.log('RX Qix cmd=0x' + q.cmd.toString(16) + ' ' + hx(q.payload, 32));
       if (q.cmd === R.QIX.BATTERY_RET && q.payload.length >= 2) { this.charging = q.payload[0] === 1; this.battery = q.payload[1]; this.emit(); }
-      const w = this.qixWaiters.find((x) => x.responseCmd === q.cmd);
-      if (w) { clearTimeout(w.timer); this.qixWaiters = this.qixWaiters.filter((x) => x !== w); w.resolve(q); }
+      /* 0xFF [cmd, status] is the generic acknowledgement the E01 sends for settings commands. */
+      const ack = q.cmd === 0xff && q.payload.length >= 2;
+      const w = this.qixWaiters.find((x) => x.responseCmd === q.cmd || (ack && x.cmd === q.payload[0] && x.ackOk));
+      if (w) { clearTimeout(w.timer); this.qixWaiters = this.qixWaiters.filter((x) => x !== w); if (ack && q.payload[1] !== 0) w.reject(new Error('El badge rechazó Qix 0x' + q.payload[0].toString(16) + ' (estado ' + q.payload[1] + ')')); else w.resolve(q); }
+    }
+    /* The E01 ignores Qix requests until the screen-info query (0xC6) has been answered once. */
+    async qixBootstrap() {
+      if (!this.control || this.qixBootstrapped) return;
+      try { await this.queryScreen(); this.qixBootstrapped = true; } catch (e) { this.log('Qix bootstrap: ' + e.message); }
     }
     async refreshBattery() {
       if (this.control) {
+        await this.qixBootstrap();
         try { const q = await this.qixRequest(R.QIX.BATTERY_REQ, [0x80], R.QIX.BATTERY_RET); if (q.payload.length >= 2) return { level: q.payload[1], charging: q.payload[0] === 1 }; } catch (e) { this.log('Batería Qix: ' + e.message); }
       }
       try { await this.querySysInfo(0, 1); } catch (e) { this.log('Batería SysInfo: ' + e.message); }
@@ -286,19 +295,22 @@
     }
     async setLanguage(code) {
       if (!this.control) throw new Error('Este badge no expone el canal Qix.');
+      await this.qixBootstrap();
       const seq = this.qixSerial = (this.qixSerial + 1) & 15;
       await this.write(R.qixFrame(R.QIX.LANGUAGE, [code === 'zh' ? 0 : 1], ((seq & 15) << 3) | 0x02), false, this.control);
       this.log('Idioma del badge: ' + (code === 'zh' ? '中文' : 'English'));
     }
     async syncTime(date = new Date()) {
       if (!this.control) throw new Error('Este badge no expone el canal Qix.');
+      await this.qixBootstrap();
       await this.write(R.qixTimeFrame(date), false, this.control);
       this.log('Hora enviada: ' + date.toLocaleString());
     }
     async setBrightness(level) {
       const value = Math.max(0, Math.min(100, Math.round(level)));
       if (this.control) {
-        try { await this.qixRequest(R.QIX.SETTING, [0x16, 0x01, 0x00, value], R.QIX.SETTING, 3000); this.brightness = value; this.emit(); return; } catch (e) { this.log('Brillo Qix: ' + e.message); }
+        await this.qixBootstrap();
+        try { await this.qixRequest(R.QIX.SETTING, [0x16, 0x01, 0x00, value], R.QIX.SETTING, 3000, true); this.brightness = value; this.emit(); return; } catch (e) { this.log('Brillo Qix: ' + e.message); }
       }
       /* RCSP SYS_INFO_SET (0x08): [function][len][type 7][value] */
       const r = await this.tryRequest(OP.SYS_INFO_SET, [0, 2, 7, value], 5000);
@@ -397,7 +409,7 @@
         let h;
         try { h = await this.queryStorage(); } catch (e) { this.log('Sin handle SD1 (' + e.message + '); se usa 2.'); h = 2; }
         if (!t.active) return;
-        if (this.control) { try { await this.write(R.QIX_HEARTBEAT, true, this.control); await this.write(R.qixTimeFrame(), true, this.control); } catch { /* best effort */ } }
+        if (this.control) { try { await this.qixBootstrap(); await this.write(R.qixTimeFrame(), true, this.control); } catch { /* best effort */ } }
         await this.request(OP.FILE_PREPARE, [0]);
         if (!t.active) return;
         this.onProgress(0, 'Negociando transferencia…');
