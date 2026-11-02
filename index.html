@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f4ee">
+<meta name="color-scheme" content="light dark">
+<title>Badge Studio · E01</title>
+<meta name="description" content="Estudio creativo para badges LED redondos (E01, E87, L8). Animaciones, texto, imágenes, GIF, video, reloj, QR, pixel art y arcade. Conectá por Bluetooth, mirá y borrá los archivos del badge.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true"><defs>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="i-wand" viewBox="0 0 24 24"><path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1zM5 20l10-10M19 14l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5zM6 6l.5 1 1 .5-1 .5L6 9l-.5-1-1-.5 1-.5z"/></symbol>
+<symbol id="i-type" viewBox="0 0 24 24"><path d="M5 5h14v3M12 5v14M9 19h6"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-8 8"/></symbol>
+<symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/></symbol>
+<symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5"/></symbol>
+<symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3M17 20h4M14 20h1"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-pixel" viewBox="0 0 24 24"><path d="M4 4h5v5H4zM10 4h5v5h-5zM15 10h5v5h-5zM4 15h5v5H4zM10 10h5v5h-5z"/></symbol>
+<symbol id="i-game" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v3a3 3 0 0 1-5.2 2L14 15h-4l-1.8 2A3 3 0 0 1 3 15v-3a4 4 0 0 1 4-4zM8 11v3M6.5 12.5h3M16 12h.01M18 14h.01"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-badge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2"/></symbol>
+<symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m7 5 12 7-12 7z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3m0 0 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 14h8v7H8z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="m3 11 18-8-7 18-2-8z"/></symbol>
+<symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.7M12 17h.01"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M6.3 17.7l2.8-2.8M14.9 9.1l2.8-2.8"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+<symbol id="i-battery" viewBox="0 0 24 24"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 10v4M5 10v4"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+</defs></svg>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#home"><span class="brand-mark">B</span><span><strong>Badge Studio</strong><small>E01 · E87 · L8</small></span></a>
+    <div class="workspace-label">ESPACIO DE TRABAJO</div>
+    <nav class="nav" aria-label="Secciones">
+      <button data-page="home"><svg><use href="#i-home"/></svg>Inicio</button>
+      <button data-page="studio"><svg><use href="#i-wand"/></svg>Crear</button>
+      <button data-page="pixel"><svg><use href="#i-pixel"/></svg>Pixel Lab</button>
+      <button data-page="arcade"><svg><use href="#i-game"/></svg>Arcade</button>
+      <button data-page="materials"><svg><use href="#i-sparkle"/></svg>Materiales</button>
+      <button data-page="library"><svg><use href="#i-folder"/></svg>Mi colección<span class="count" id="libraryCount">0</span></button>
+      <button data-page="device"><svg><use href="#i-badge"/></svg>Mi badge<span class="count" id="deviceFileCount" hidden>0</span></button>
+      <button data-page="settings"><svg><use href="#i-settings"/></svg>Ajustes</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="device-mini">
+        <div class="device-mini-top"><div class="mini-orb" id="miniOrb">E01</div><div><strong id="miniName">Sin badge</strong><p id="miniStatus">Sin conexión</p></div></div>
+        <div class="mini-battery" id="miniBattery" hidden><svg class="icon"><use href="#i-battery"/></svg><span id="miniBatteryText">—</span></div>
+        <button data-go="device">Abrir Mi badge <svg><use href="#i-badge"/></svg></button>
+      </div>
+      <div class="user-chip"><div class="avatar" id="avatar">BS</div><div><strong id="userName">Estudio local</strong><small>Todo queda en este navegador</small></div></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Abrir menú"><svg class="icon"><use href="#i-menu"/></svg></button>
+      <div class="breadcrumb"><span>Badge Studio</span><span>/</span><strong id="breadcrumb">Inicio</strong></div>
+      <div class="top-actions">
+        <span class="connection-chip"><span class="dot" id="connectionDot"></span><span id="connectionLabel">Sin conexión</span></span>
+        <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema"><svg class="icon"><use href="#i-sun"/></svg></button>
+        <button class="icon-btn" id="helpBtn" aria-label="Ayuda"><svg class="icon"><use href="#i-help"/></svg></button>
+        <button class="btn dark" id="connectBtn"><svg><use href="#i-bt"/></svg><span>Conectar badge</span></button>
+      </div>
+    </header>
+    <div class="notice" id="browserNotice" hidden></div>
+    <div class="busy" id="busyBanner" hidden><div><strong id="busyText">Preparando…</strong><div class="bar" id="buildProgress"><span></span></div></div><button class="btn small" id="cancelBuild">Cancelar</button></div>
+
+    <!-- ===== Inicio ===== -->
+    <section class="page" id="page-home" hidden>
+      <div class="page-head"><div><div class="eyebrow">PEQUEÑA PANTALLA. GRANDES IDEAS.</div><h1>Hacé que pase algo.</h1><p>Diseñá, jugá y enviá contenido a tu badge redondo. Sin cuentas ni servidores.</p></div></div>
+      <div class="home-grid">
+        <article class="card device-card">
+          <div class="device-visual"><div class="orb" id="homeOrb"><canvas id="homePreview" width="184" height="184"></canvas></div></div>
+          <div class="device-text"><div class="eyebrow">MI BADGE</div><h2 id="homeDeviceName">Sin badge conectado</h2><p id="homeDeviceMeta">Conectá por Bluetooth para ver batería, archivos y enviar contenido.</p>
+            <div class="stat-row" id="homeStats" hidden><span><b id="homeBattery">—</b> batería</span><span><b id="homeFiles">—</b> archivos</span><span><b id="homeStorage">—</b> almacenamiento</span></div>
+            <div class="actions"><button class="btn dark" id="homeConnect"><svg><use href="#i-bt"/></svg>Conectar</button><button class="btn" data-go="device">Mi badge</button></div></div>
+        </article>
+        <article class="card quick"><div class="eyebrow">CREAR</div><h2>¿Qué hacemos hoy?</h2><div class="quick-grid" id="quickGrid"></div></article>
+      </div>
+      <div class="section-head"><h2>Recientes</h2><button class="btn small" data-go="library">Ver colección</button></div>
+      <div class="library-list compact" id="homeRecent"></div>
+      <div class="empty" id="homeEmpty"><h3>Tu próxima idea vive acá.</h3><p>Guardá diseños y animaciones. Aparecerán en esta lista.</p></div>
+      <div class="section-head"><h2>Materiales destacados</h2><button class="btn small" data-go="materials">Ver todos</button></div>
+      <div class="presets small" id="homeMaterials"></div>
+    </section>
+
+    <!-- ===== Crear / Pixel / Arcade comparten el escenario ===== -->
+    <section class="page" id="page-editor" hidden>
+      <div class="page-head">
+        <div><div class="eyebrow" id="pageEyebrow">01 / CREAR</div><h1 id="pageTitle">Tu diseño</h1><p id="pageSubtitle">Un poco de código, un poco de arte. Y mucho de vos.</p></div>
+        <div class="head-actions" id="editorActions">
+          <button class="btn" id="saveProject"><svg><use href="#i-save"/></svg>Guardar</button>
+          <button class="btn" id="projectExport"><svg><use href="#i-download"/></svg>Proyecto</button>
+          <label class="btn file-btn"><svg><use href="#i-upload"/></svg>Abrir<input type="file" id="importProject" accept=".json,application/json" hidden></label>
+        </div>
+      </div>
+      <div class="studio-grid">
+        <div class="stage-col">
+          <div class="stage-card">
+            <div class="stage-top"><span class="stage-label"><span class="dot"></span><span id="stageChip">E01 · 368 × 368</span></span><span class="chip" id="previewFps">10 FPS · LOOP</span></div>
+            <div class="stage"><div class="hardware" id="hardware"><canvas id="stage" width="368" height="368" tabindex="0" aria-label="Vista previa del badge"></canvas></div>
+              <div class="stage-right"><button class="icon-btn ghost" id="circleView" aria-label="Vista circular">◯</button><button class="icon-btn ghost" id="squareView" aria-label="Vista cuadrada">▢</button><button class="icon-btn ghost" id="resetPreview" aria-label="Reiniciar"><svg class="icon"><use href="#i-reset"/></svg></button></div>
+            </div>
+            <div class="timeline" id="timeline"><button class="icon-btn" id="playPause" aria-label="Reproducir"><svg class="icon"><use href="#i-pause"/></svg></button><span class="timecode" id="timeCode">00:00.0 / 00:04.0</span><input type="range" id="scrubber" min="0" max="4" step="0.05" value="0" aria-label="Línea de tiempo"><span class="tiny" id="timelineHelp">Todo lo que ves acá se puede exportar.</span></div>
+            <div class="pad" id="gamePad" hidden><button data-key="ArrowUp" aria-label="Arriba">▲</button><div><button data-key="ArrowLeft" aria-label="Izquierda">◀</button><button data-key="Space" aria-label="Acción">●</button><button data-key="ArrowRight" aria-label="Derecha">▶</button></div><button data-key="ArrowDown" aria-label="Abajo">▼</button></div>
+          </div>
+          <div class="shelf" id="shelf">
+            <div class="shelf-thumb" id="preparedThumb"></div>
+            <div class="shelf-text"><strong id="preparedName">Tu próxima creación está por llegar.</strong><p id="preparedMeta">Diseñá algo y preparalo para el badge.</p></div>
+            <div class="shelf-actions">
+              <button class="btn" id="downloadAvi" disabled><svg><use href="#i-download"/></svg>AVI</button>
+              <button class="btn" id="downloadGif" disabled><svg><use href="#i-download"/></svg>GIF</button>
+              <button class="btn lime" id="sendBadge" disabled><svg><use href="#i-send"/></svg>Enviar al badge</button>
+            </div>
+          </div>
+        </div>
+        <aside class="inspector">
+          <div class="inspector-head"><span class="eyebrow" id="inspectorTag">01 / CREAR</span><h2 id="inspectorTitle">Tu diseño</h2></div>
+          <div class="mode-tabs" id="modeTabs"></div>
+          <div id="inspectorBody"></div>
+          <div id="pixelControls" hidden>
+            <div class="pixel-wrap"><canvas id="pixelCanvas" width="320" height="320" tabindex="0" aria-label="Editor de píxeles"></canvas></div>
+            <div class="field"><label>Herramientas</label><div class="tool-row" id="pixelTools"></div></div>
+            <div class="field"><label>Paleta <select id="paletteSelect"><option value="lime">Lima</option><option value="pico">PICO-8</option><option value="gameboy">Game Boy</option><option value="pastel">Pastel</option></select></label><div class="palette" id="pixelPalette"></div><div class="row"><input type="color" id="pixelColor" value="#d0f56a" aria-label="Color"><label class="check"><input type="checkbox" id="pixelMirror"> Espejo</label><label class="check"><input type="checkbox" id="pixelOnion" checked> Cebolla</label></div></div>
+            <div class="field"><label>Grilla <select id="pixelSize"><option value="8">8 × 8</option><option value="16" selected>16 × 16</option><option value="24">24 × 24</option><option value="32">32 × 32</option></select></label><div class="row"><button class="btn small" id="pixelFlipH">Voltear ↔</button><button class="btn small" id="pixelFlipV">Voltear ↕</button><button class="btn small" id="pixelShiftL">◀</button><button class="btn small" id="pixelShiftR">▶</button><button class="btn small" id="pixelShiftU">▲</button><button class="btn small" id="pixelShiftD">▼</button></div></div>
+            <div class="field"><label>Cuadros <span class="tiny" id="frameCount">1 / 1</span></label><div class="frames" id="pixelFrames"></div><div class="row"><button class="btn small" id="addFrame"><svg><use href="#i-plus"/></svg>Nuevo</button><button class="btn small" id="duplicateFrame">Duplicar</button><button class="btn small" id="moveFrameL">←</button><button class="btn small" id="moveFrameR">→</button><button class="btn small danger" id="deleteFrame">Borrar</button></div><div class="row"><button class="btn small" id="undoPixel"><svg><use href="#i-undo"/></svg></button><button class="btn small" id="redoPixel"><svg><use href="#i-redo"/></svg></button><button class="btn small" id="clearPixel">Limpiar</button><label class="btn small file-btn">Importar imagen<input type="file" id="pixelImport" accept="image/*" hidden></label><button class="btn small" id="pixelPng">PNG</button></div></div>
+            <div class="field"><label>Velocidad <output id="pixelRateOut">4 FPS</output></label><input type="range" id="pixelRate" min="1" max="16" step="1" value="4"></div>
+          </div>
+          <div id="arcadeControls" hidden>
+            <div class="field"><label>Juego</label><div class="game-chooser" id="gameChooser"></div></div>
+            <h3 id="gameTitle">Snake</h3><p class="help" id="gameInstructions"></p><p class="status" id="gameStatus"></p>
+            <div class="row"><button class="btn dark" id="startGame"><svg><use href="#i-play"/></svg>Empezar</button><button class="btn" id="pauseGame">Pausar</button><button class="btn lime" id="recordBtn">Grabar 6 s</button></div>
+            <div class="field"><label>Control táctil</label><p class="help">Deslizá o tocá sobre la pantalla para dirigir; el pad de abajo también funciona. Grabá la partida y mandala al badge como animación.</p><label class="check"><input type="checkbox" id="padToggle" checked> Mostrar pad en pantalla</label></div>
+            <div class="field"><label>Juegos dentro del badge</label><p class="help">El firmware de fábrica solo reproduce medios. Para correr juegos con la pantalla táctil del badge hay que cargar un firmware propio: ver <a href="docs/GAMES-ON-BADGE.md" target="_blank" rel="noopener">docs/GAMES-ON-BADGE.md</a>.</p><button class="btn small" id="downloadPort">Descargar núcleo Snake en C</button></div>
+          </div>
+          <div id="exportSettings">
+            <h3 class="section-title">Exportar</h3>
+            <div class="two-fields"><label>Duración <select id="exDuration"><option value="2">2 s</option><option value="3">3 s</option><option value="4" selected>4 s</option><option value="6">6 s</option><option value="8">8 s</option><option value="10">10 s</option><option value="15">15 s</option></select></label><label>FPS <select id="exFps"><option value="2">2</option><option value="5">5</option><option value="8">8</option><option value="10" selected>10</option><option value="12">12</option><option value="15">15</option></select></label></div>
+            <div class="two-fields"><label>Resolución <select id="exResolution"><option value="368" selected>368 px</option><option value="360">360 px</option><option value="240">240 px</option></select></label><label>Calidad <select id="exQuality"><option value="70">Ligera</option><option value="82" selected>Normal</option><option value="92">Alta</option></select></label></div>
+            <div class="two-fields"><label>Límite <select id="exBudget"><option value="900">900 KB (seguro)</option><option value="2000">2 MB</option><option value="5000">5 MB</option><option value="25000">25 MB</option></select></label><label class="check"><input type="checkbox" id="exStill"> Imagen fija</label></div>
+            <div class="field"><label>Nombre en el badge</label><input type="text" id="targetName" value="BADGE001.AVI" maxlength="12" spellcheck="false"></div>
+            <p class="tiny" id="exportEstimate">40 cuadros</p>
+            <div class="row"><button class="btn dark wide" id="buildAvi"><svg><use href="#i-sparkle"/></svg>Preparar para el badge</button><button class="btn" id="savePng">PNG</button></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== Materiales ===== -->
+    <section class="page" id="page-materials" hidden>
+      <div class="page-head"><div><div class="eyebrow">BIBLIOTECA</div><h1>Materiales</h1><p>Animaciones listas, stickers, fondos y tus propios GIF e imágenes.</p></div><div class="head-actions"><label class="btn dark file-btn"><svg><use href="#i-upload"/></svg>Subir imagen o GIF<input type="file" id="materialUpload" accept="image/*" multiple hidden></label></div></div>
+      <div class="tabs" id="materialTabs"><button data-tab="patterns" class="active">Animaciones</button><button data-tab="stickers">Stickers</button><button data-tab="mine">Mis materiales</button><button data-tab="web">Desde la web</button></div>
+      <div id="materials-patterns"><div class="presets" id="materialPatterns"></div></div>
+      <div id="materials-stickers" hidden><p class="help">Tocá un sticker para agregarlo al diseño actual. Después movelo desde el panel Stickers.</p><div class="sticker-grid" id="stickerGrid"></div></div>
+      <div id="materials-mine" hidden><div class="library-list" id="materialList"></div><div class="empty" id="materialEmpty"><h3>Todavía no subiste materiales.</h3><p>Imágenes y GIF que subas quedan guardados en este navegador.</p></div></div>
+      <div id="materials-web" hidden>
+        <div class="card"><h3>Pegá un enlace</h3><p class="help">Enlace directo a una imagen o GIF (debe permitir CORS; GIPHY y Tenor lo permiten).</p><div class="row"><input type="url" id="webUrl" placeholder="https://media.giphy.com/…/giphy.gif"><button class="btn dark" id="webFetch">Traer</button></div></div>
+        <div class="card"><h3>Buscar en GIPHY</h3><p class="help">Usá tu propia API key de GIPHY (gratis en developers.giphy.com). Se guarda solo en este navegador.</p><div class="row"><input type="text" id="giphyKey" placeholder="API key" spellcheck="false"><input type="search" id="giphyQuery" placeholder="Buscar GIF…"><button class="btn dark" id="giphySearch">Buscar</button></div><div class="sticker-grid gif-grid" id="giphyResults"></div></div>
+      </div>
+    </section>
+
+    <!-- ===== Colección ===== -->
+    <section class="page" id="page-library" hidden>
+      <div class="page-head"><div><div class="eyebrow">IDEAS QUE MERECEN QUEDARSE.</div><h1>Tu universo, guardado.</h1><p>Proyectos editables y animaciones. Todo en este navegador.</p></div><div class="head-actions"><input type="search" id="librarySearch" placeholder="Buscar…"><label class="btn file-btn"><svg><use href="#i-upload"/></svg>Importar AVI<input type="file" id="aviFile" accept=".avi,video/x-msvideo,video/avi" hidden></label></div></div>
+      <div class="library-list" id="libraryList"></div>
+      <div class="empty" id="emptyLibrary"><h2>Tu próxima idea vive acá.</h2><p>Guardá proyectos editables y animaciones.</p></div>
+    </section>
+
+    <!-- ===== Mi badge ===== -->
+    <section class="page" id="page-device" hidden>
+      <div class="page-head"><div><div class="eyebrow">DEL LIENZO A TU MUNDO.</div><h1>Conectá con tu badge.</h1><p>Una conexión real. Un registro claro de cada paso.</p></div><div class="head-actions"><button class="btn" id="forgetDevices">Olvidar badges</button><button class="btn dark" id="deviceConnect"><svg><use href="#i-bt"/></svg>Conectar</button></div></div>
+      <div class="device-grid">
+        <article class="card"><div class="eyebrow">ESTADO</div>
+          <dl class="kv"><dt>Dispositivo</dt><dd id="deviceName">—</dd><dt>Perfil</dt><dd id="deviceProfile">—</dd><dt>Estado</dt><dd id="deviceStatus">Sin conexión</dd><dt>Autenticación</dt><dd id="authStatus">Pendiente</dd><dt>Batería</dt><dd id="batteryStatus">Sin lectura</dd><dt>Escritura</dt><dd id="writeStatus">—</dd><dt>Almacenamiento</dt><dd id="storageStatus">Por consultar</dd><dt>Paquete</dt><dd id="packetStatus">Sin negociar</dd><dt>Pantalla</dt><dd id="screenStatus">—</dd></dl>
+          <p class="tiny" id="deviceInfoText"></p>
+          <div class="row"><button class="btn small" id="authBtn">Autenticar</button><button class="btn small" id="infoBtn">Info</button><button class="btn small" id="storageBtn">Almacenamiento</button><button class="btn small" id="batteryBtn">Batería</button><button class="btn small" id="diagBtn">Diagnóstico</button><button class="btn small danger" id="disconnectBtn">Desconectar</button></div>
+          <div class="diag" id="diagResult" hidden></div>
+        </article>
+        <article class="card"><div class="eyebrow">AJUSTES DEL BADGE</div>
+          <div class="field"><label>Brillo <output id="brightnessOut">—</output></label><input type="range" id="brightness" min="0" max="100" step="5" value="70"><button class="btn small" id="brightnessApply">Aplicar</button></div>
+          <div class="field"><label>Idioma del menú</label><div class="row"><button class="btn small" data-lang="en">English</button><button class="btn small" data-lang="zh">中文</button></div></div>
+          <div class="field"><label>Hora</label><div class="row"><button class="btn small" id="syncTime">Sincronizar con este dispositivo</button></div></div>
+          <p class="help">Brillo, idioma y hora usan el canal Qix (FD02) o SysInfo; si el badge no los expone, el botón avisa y no pasa nada más.</p>
+          <div class="eyebrow">TRANSFERENCIA</div>
+          <div class="progress-wrap"><progress id="transferProgress" max="100" value="0"></progress><span id="transferPercent">0.0 %</span></div><p class="tiny" id="transferLabel">Sin transferencia.</p>
+          <div class="row"><button class="btn small danger" id="cancelTransfer" disabled>Cancelar</button></div>
+        </article>
+        <article class="card wide"><div class="section-head"><div><div class="eyebrow">ARCHIVOS EN EL BADGE</div><h2 id="deviceFilesTitle">Contenido guardado</h2></div><div class="row"><button class="btn small" id="refreshFiles"><svg><use href="#i-refresh"/></svg>Actualizar</button><button class="btn small danger" id="deleteAllFiles" hidden>Borrar todo</button></div></div>
+          <p class="help">Listado por RCSP 0x0C (igual que la app oficial). Borrado por clúster (0x1F) con respaldo por nombre (0x23). Las miniaturas aparecen para los archivos enviados desde este estudio.</p>
+          <div class="file-grid" id="deviceFiles"></div><div class="empty small" id="deviceFilesEmpty"><p>Conectá el badge y tocá Actualizar para ver sus archivos.</p></div>
+        </article>
+        <article class="card wide"><div class="section-head"><div class="eyebrow">REGISTRO</div><div class="row"><button class="btn small" id="copyLog"><svg><use href="#i-copy"/></svg>Copiar</button><button class="btn small" id="downloadLog">Descargar</button><button class="btn small" id="clearLog">Limpiar</button></div></div><pre class="log" id="log"></pre></article>
+      </div>
+    </section>
+
+    <!-- ===== Ajustes ===== -->
+    <section class="page" id="page-settings" hidden>
+      <div class="page-head"><div><div class="eyebrow">PREFERENCIAS</div><h1>Ajustes</h1><p>Se guardan en este navegador.</p></div></div>
+      <div class="device-grid">
+        <article class="card"><div class="eyebrow">APARIENCIA</div>
+          <div class="field"><label>Tema</label><select id="setTheme"><option value="auto">Automático</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></div>
+          <div class="field"><label class="check"><input type="checkbox" id="setMotion"> Reducir animaciones de la interfaz</label></div>
+          <div class="field"><label>Tu nombre (para los textos de ejemplo)</label><input type="text" id="setName" maxlength="24" placeholder="MARTÍN"></div>
+        </article>
+        <article class="card"><div class="eyebrow">BADGE</div>
+          <div class="field"><label>Resolución por defecto</label><select id="setResolution"><option value="368">368 px (E01 / E87 / L8)</option><option value="360">360 px</option><option value="240">240 px (BW03 y similares)</option></select></div>
+          <div class="field"><label>Prefijo de nombre de archivo</label><input type="text" id="setPrefix" maxlength="5" value="BADGE" spellcheck="false"></div>
+          <div class="field"><label class="check"><input type="checkbox" id="setConfirmSend" checked> Confirmar antes de enviar</label></div>
+          <div class="field"><label class="check"><input type="checkbox" id="setAutoReconnect" checked> Reconectar al último badge al abrir</label></div>
+        </article>
+        <article class="card wide"><div class="eyebrow">DATOS</div>
+          <p class="help">La colección, los materiales y las miniaturas viven en IndexedDB de este navegador. Podés exportar cada proyecto como JSON.</p>
+          <div class="row"><button class="btn danger" id="resetData">Borrar todos los datos locales</button><button class="btn" id="installBtn" hidden>Instalar como app</button></div>
+          <div class="eyebrow">ACERCA DE</div>
+          <p class="help">Badge Studio <span id="versionText"></span>. Protocolo Jieli RCSP documentado a partir del SDK oficial (fw-AC63_BT_SDK, Android-JL_Bluetooth) y de los proyectos AuraCast, web-bluetooth-e87, jieli-ble-badge-research y E-Badge Studio. Ver <a href="docs/PROTOCOL.md" target="_blank" rel="noopener">docs/PROTOCOL.md</a> y <a href="docs/RESEARCH.md" target="_blank" rel="noopener">docs/RESEARCH.md</a>.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<dialog id="saveDialog"><form id="saveForm" method="dialog"><h2>Guardar en tu colección</h2><label>Nombre<input type="text" id="projectName" maxlength="60" required></label><div class="row end"><button class="btn" type="button" data-close="saveDialog">Cancelar</button><button class="btn dark" type="submit">Guardar</button></div></form></dialog>
+<dialog id="sendDialog"><div><h2>Enviar al badge</h2><p id="sendSummary"></p><label>Nombre en el badge<input type="text" id="sendName" maxlength="12" spellcheck="false"></label><p class="help">8 caracteres + extensión. Si ya existe, el badge pide otro nombre y el estudio numera automáticamente.</p><div class="row end"><button class="btn" data-close="sendDialog">Cancelar</button><button class="btn lime" id="confirmSend"><svg><use href="#i-send"/></svg>Enviar</button></div></div></dialog>
+<dialog id="helpDialog"><div><h2>Cómo funciona</h2>
+<ol class="help-list"><li><b>Creá</b> en Crear, Pixel Lab o Arcade. Todo se previsualiza en la pantalla redonda.</li><li><b>Preparar para el badge</b> genera un AVI MJPEG (JPEG baseline con tablas estándar, lo que el chip Jieli decodifica bien).</li><li><b>Conectá</b> con Chrome, Edge u Opera por HTTPS. Poné el badge en modo Bluetooth (botón BT) y elegí E01 / E87 / L8.</li><li><b>Enviá</b>: el badge pide los datos por ventanas, confirma el nombre y cierra la transferencia.</li><li><b>Mi badge</b> lista los archivos guardados, permite borrarlos, ajustar brillo, idioma y hora, y guarda un registro para diagnóstico.</li></ol>
+<p class="help">Sin Web Bluetooth (Safari, Firefox, iPhone) podés crear y descargar el AVI; para enviarlo usá Chrome en Android, Windows, macOS o ChromeOS.</p>
+<div class="row end"><button class="btn dark" data-close="helpDialog">Entendido</button></div></div></dialog>
+
+<script src="js/core.js"></script>
+<script src="js/jl-auth.js"></script>
+<script src="js/jpeg.js"></script>
+<script src="js/avi.js"></script>
+<script src="js/gif.js"></script>
+<script src="js/rcsp.js"></script>
+<script src="js/badge-client.js"></script>
+<script src="js/qr.js"></script>
+<script src="js/patterns.js"></script>
+<script src="js/textfx.js"></script>
+<script src="js/clock.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/pixel.js"></script>
+<script src="js/games.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

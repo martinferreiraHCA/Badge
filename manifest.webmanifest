@@ -1,0 +1,16 @@
+{
+  "name": "Badge Studio",
+  "short_name": "Badge Studio",
+  "description": "Estudio creativo para badges LED redondos (E01, E87, L8): animaciones, texto, GIF, video, reloj, QR, pixel art y arcade por Web Bluetooth.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f4ee",
+  "theme_color": "#20241e",
+  "lang": "es",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
