@@ -55,6 +55,32 @@ const { chromium } = require('playwright');
     await go('device'); await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, '07-device.png') });
     await go('settings'); await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, '08-settings.png') });
     await page.setViewportSize({ width: 390, height: 844 }); await go('studio'); await page.waitForTimeout(400); await page.screenshot({ path: path.join(shots, '09-mobile-studio.png') });
+    /* ---- file based modes: image, GIF, sequence, save & reopen from the library ---- */
+    const BSn = require('../tests/helpers/load.js');
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'badge-smoke-'));
+    const w = 64, h = 48, mk = (c) => { const d = new Uint8ClampedArray(w * h * 4); for (let i = 0; i < w * h; i++) { d[i * 4] = c; d[i * 4 + 1] = (i % w) * 4; d[i * 4 + 2] = 200 - c; d[i * 4 + 3] = 255; } return d; };
+    fs.writeFileSync(path.join(tmp, 'a.gif'), BSn.gif.encode([{ data: mk(20), width: w, height: h, delay: 100 }, { data: mk(200), width: w, height: h, delay: 100 }, { data: mk(120), width: w, height: h, delay: 100 }]));
+    fs.writeFileSync(path.join(tmp, 'a.jpg'), BSn.jpeg.encodeRGBA(mk(90), w, h, 80));
+    await page.setViewportSize({ width: 1360, height: 900 }); await go('studio');
+    await page.click('#modeTabs [data-mode="image"]'); await page.setInputFiles('#inspectorBody input[type=file]', path.join(tmp, 'a.jpg')); await page.waitForTimeout(400);
+    await page.click('#modeTabs [data-mode="gif"]'); await page.setInputFiles('#inspectorBody input[type=file]', path.join(tmp, 'a.gif')); await page.waitForTimeout(500);
+    const gifMeta = await page.textContent('#inspectorBody #pickMeta'); console.log('GIF cargado:', gifMeta);
+    if (!/3 cuadros/.test(gifMeta)) throw new Error('El GIF no se decodificó: ' + gifMeta);
+    await page.click('#buildAvi'); await page.waitForFunction(() => !document.getElementById('downloadAvi').disabled, null, { timeout: 60000 });
+    console.log('AVI desde GIF:', await page.textContent('#preparedMeta'));
+    await page.click('#modeTabs [data-mode="sequence"]'); await page.setInputFiles('#inspectorBody input[type=file]', [path.join(tmp, 'a.jpg'), path.join(tmp, 'a.jpg')]); await page.waitForTimeout(400);
+    if ((await page.locator('#seqList .seq').count()) !== 2) throw new Error('La secuencia no cargó 2 imágenes');
+    await page.click('#modeTabs [data-mode="image"]'); await page.waitForTimeout(200);
+    await page.click('#saveProject'); await page.fill('#projectName', 'Prueba imagen'); await page.click('#saveForm button[type=submit]'); await page.waitForTimeout(600);
+    await go('library'); await page.waitForTimeout(400);
+    if ((await page.locator('#libraryList .library-card').count()) < 1) throw new Error('El proyecto no aparece en la colección');
+    await page.evaluate(() => { localStorage.removeItem('badge-studio-draft-v2'); });
+    await page.click('#libraryList [data-open]'); await page.waitForTimeout(800);
+    const reopened = await page.evaluate(() => document.querySelector('#inspectorBody #pickMeta')?.textContent || '');
+    console.log('Proyecto reabierto, imagen:', reopened);
+    if (!/a\.jpg/.test(reopened)) throw new Error('La imagen no volvió con el proyecto');
+    await page.screenshot({ path: path.join(shots, '13-studio-image-reopened.png') });
+
     /* ---- end-to-end against the simulated badge injected into the page ---- */
     const simSrc = fs.readFileSync(path.join(__dirname, '..', 'tests', 'helpers', 'sim-badge.js'), 'utf8').replace("const BS = globalThis.BS;", '').replace(/module\.exports[^;]*;/, '');
     const page2 = await browser.newPage({ viewport: { width: 1360, height: 900 } });
