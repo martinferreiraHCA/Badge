@@ -138,3 +138,20 @@ test('disconnect aborts a transfer and rejects pending requests', async () => {
   await assert.rejects(p, /desconectado/);
   assert.equal(client.state, 'offline');
 });
+
+test('reads files back: full download and first-frame preview with early cancel', async () => {
+  const badge = new SimBadge(), client = makeClient(badge);
+  await client.connect();
+  const frame = BS.jpeg.encodeRGBA(new Uint8ClampedArray(368 * 368 * 4).fill(90), 368, 368, 70);
+  const avi = BS.avi.build([frame, frame, frame, frame, frame, frame], 368, 368, 5);
+  badge.files = ['LOOP.AVI']; badge.contents = { 'LOOP.AVI': avi };
+  const files = await client.browseFiles();
+  const full = await client.readFile(files[0]);
+  assert.equal(full.size, avi.length);
+  assert.deepEqual(Array.from(full.data), Array.from(avi));
+  const jpeg = await client.previewFile(files[0]);
+  assert.deepEqual(Array.from(jpeg), Array.from(frame));
+  assert.ok(badge.log.some((l) => l.startsWith('C 0x24')));
+  const byName = await client.readFile({ name: 'LOOP.AVI' }, { maxBytes: 1000 });
+  assert.ok(byName.data.length >= 490 && byName.data.length < avi.length);
+});

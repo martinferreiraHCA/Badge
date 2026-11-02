@@ -27,7 +27,7 @@
   const OP = {
     FEATURE_MAP: 0x02, TARGET_INFO: 0x03, RESET_AUTH: 0x06, SYS_INFO: 0x07, SYS_INFO_SET: 0x08,
     FILE_BROWSE: 0x0c, FILE_BROWSE_STOP: 0x0d,
-    FILE_META: 0x1b, FILE_END: 0x1c, FILE_READ: 0x1d, FILE_ERROR: 0x1e, FILE_DELETE: 0x1f, FILE_NAME: 0x20, FILE_PREPARE: 0x21,
+    FILE_READ_BACK: 0x24, FILE_META: 0x1b, FILE_END: 0x1c, FILE_READ: 0x1d, FILE_ERROR: 0x1e, FILE_DELETE: 0x1f, FILE_NAME: 0x20, FILE_PREPARE: 0x21,
     DEVICE_FORMAT: 0x22, ONE_FILE_DELETE: 0x23, FILE_PARAMS: 0x27, SMALL_FILE: 0x28, DATA: 0x01,
   };
   const STATUS_NAMES = { 0: 'OK', 1: 'ERROR', 2: 'NO_SOPORTADO', 3: 'DATOS', 4: 'TIMEOUT', 5: 'RECHAZADO' };
@@ -148,6 +148,29 @@
   function parseBrowseTotal(p) { if (!p.length) return 0; if (p.length === 1) return p[0]; if (p.length === 2) return BS.util.readU16BE(p); return BS.util.readU32BE(p); }
   /* 0x1F DelDevFileParam: [last][devHandle BE32][type (1 = file)][cluster BE32] */
   function deleteByClusterParam(devHandle, isFile, cluster, last = true) { return concat(new Uint8Array([last ? 1 : 0]), BS.util.u32be(devHandle), new Uint8Array([isFile ? 1 : 0]), BS.util.u32be(cluster)); }
+  /* 0x24 ReadFileFromDeviceCmd (ONE_FILE_TRANS_BACK), op byte first:
+       1 start by cluster  [1][devHandle BE32][offset BE32][cluster BE32]
+       2 start by name     [2][devHandle BE32][offset BE32][unicode][name]   name: "\\U" + UTF-16LE + 00 00, or GBK/ASCII
+       0x81 cancel [0x81][reason] (phone → badge) · 0x80 stop [0x80][ret] (badge → phone)
+     reply to start: [op][size BE32] · data arrives as DATA frames [0x24][offset BE32][crc16?][bytes] */
+  function readFileByClusterParam(devHandle, cluster, offset = 0) { return concat(new Uint8Array([1]), BS.util.u32be(devHandle), BS.util.u32be(offset), BS.util.u32be(cluster)); }
+  function readFileByNameParam(devHandle, name, unicode = false, offset = 0) {
+    let nameData;
+    if (unicode) { const u = new Uint8Array(name.length * 2); for (let i = 0; i < name.length; i++) { u[i * 2] = name.charCodeAt(i) & 255; u[i * 2 + 1] = name.charCodeAt(i) >> 8; } nameData = concat(new TextEncoder().encode('\\U'), u, new Uint8Array(2)); }
+    else nameData = new TextEncoder().encode(name);
+    return concat(new Uint8Array([2]), BS.util.u32be(devHandle), BS.util.u32be(offset), new Uint8Array([unicode ? 1 : 0]), nameData);
+  }
+  const READ_CANCEL = (reason = 0) => new Uint8Array([0x81, reason & 255]);
+  function parseReadStart(p) { return p.length >= 5 ? BS.util.readU32BE(p, 1) : p.length >= 4 ? BS.util.readU32BE(p, 0) : 0; }
+  /* Locate the first complete JPEG (FF D8 … FF D9) inside a byte stream (AVI movi chunk or raw JPEG). */
+  function firstJpeg(bytes) {
+    let start = -1;
+    for (let i = 0; i + 2 < bytes.length; i++) if (bytes[i] === 0xff && bytes[i + 1] === 0xd8 && bytes[i + 2] === 0xff) { start = i; break; }
+    if (start < 0) return null;
+    for (let i = start + 2; i + 1 < bytes.length; i++) if (bytes[i] === 0xff && bytes[i + 1] === 0xd9) return bytes.slice(start, i + 2);
+    return null;
+  }
+
   /* 0x23 DeleteFileByNameCmd: [0x00][ASCII name] */
   function deleteByNameParam(name) { return concat(new Uint8Array([0]), new TextEncoder().encode(name)); }
 
@@ -179,5 +202,5 @@
   }
   function timestampName(ext) { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()) + '.' + ext; }
 
-  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
+  BS.rcsp = { UUID, NAME_PREFIXES, OP, STATUS_NAMES, DEV_HANDLERS, commandFrame, responseFrame, Parser, parseTLV, SYSINFO_NAMES, TARGET_NAMES, parseStorageHandle, parseStorageInfo, STORAGE_NAMES, fileBrowseParam, parseFileStructs, parseBrowseTotal, deleteByClusterParam, deleteByNameParam, readFileByClusterParam, readFileByNameParam, READ_CANCEL, parseReadStart, firstJpeg, qixFrame, parseQix, QIX, qixTimeFrame, QIX_HEARTBEAT, utf16Path, timestampName };
 })(typeof window !== 'undefined' ? window : globalThis);

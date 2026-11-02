@@ -105,6 +105,12 @@ const { chromium } = require('playwright');
     console.log('Simulado: envío completo', JSON.stringify(sent));
     if (!sent.files.includes('BADGE001.AVI') || !sent.ok) throw new Error('El envío simulado no terminó como se esperaba');
     await page2.waitForFunction(() => document.querySelectorAll('#deviceFiles .file-card').length === 2, null, { timeout: 10000 });
+    /* previews read back from the simulated badge: drop the local thumbnail and regenerate it over 0x24 */
+    await page2.evaluate(async () => { await window.BS.db.thumbs.clear(); });
+    await page2.click('#refreshFiles'); await page2.waitForFunction(() => document.querySelectorAll('#deviceFiles .thumb img').length === 0, null, { timeout: 10000 });
+    await page2.click('#previewAll');
+    await page2.waitForFunction(() => document.querySelectorAll('#deviceFiles .thumb img').length === 1, null, { timeout: 30000 });
+    console.log('Simulado: vista previa leída del badge OK');
     await page2.screenshot({ path: path.join(shots, '11-device-connected.png') });
     await page2.click('#diagBtn'); await page2.waitForFunction(() => document.querySelectorAll('#diagResult div').length >= 5, null, { timeout: 20000 });
     await page2.screenshot({ path: path.join(shots, '12-device-diagnostics.png') });

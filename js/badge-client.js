@@ -32,7 +32,7 @@
       this.parser = new R.Parser(); this.serial = 0; this.qixSerial = 0; this.session = 0; this.fragment = 180;
       this.transfer = null; this.battery = null; this.charging = null; this.storage = null; this.info = ''; this.infoAttrs = []; this.sysAttrs = [];
       this.screen = null; this.brightness = null; this.packetSize = 0; this.withCRC = false; this.txProps = ''; this.files = []; this.storages = []; this.storageName = '';
-      this.qixWaiters = []; this.lastActivity = 0; this.connectedAt = 0; this.storages = []; this.storageName = ''; this.browse = null;
+      this.qixWaiters = []; this.lastActivity = 0; this.connectedAt = 0; this.storages = []; this.storageName = ''; this.browse = null; this.read = null;
       this.boundDisconnected = () => this.disconnected();
     }
     get ready() { return this.state === 'ready' && !!this.device?.gatt?.connected; }
@@ -135,6 +135,7 @@
       for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Bluetooth desconectado')); }
       this.pending.clear();
       for (const w of this.qixWaiters) { clearTimeout(w.timer); w.reject(new Error('Bluetooth desconectado')); }
+      clearTimeout(this.readTimer); this.read = null; clearTimeout(this.browseTimer); this.browse = null;
       this.qixWaiters = [];
       if (this.transfer?.active) this.abortTransfer('Bluetooth desconectado');
       this.log('Bluetooth desconectado.'); this.emit();
@@ -357,6 +358,47 @@
           .catch((e) => finish(e.status === 2 ? new Error('Este badge no soporta el listado de archivos (NOT_SUPPORTED).') : e));
       });
     }
+    /* ---- reading files back (0x24): previews and downloads ----
+       maxBytes stops early (cancel 0x81) once enough data for a preview arrived. */
+    readFile(entry, { maxBytes = Infinity, onProgress = () => {}, timeout = 30000 } = {}) {
+      if (!this.ready) return Promise.reject(new Error('Conectá y autenticá el badge primero.'));
+      if (this.transfer?.active || this.read) return Promise.reject(new Error('Esperá que termine la transferencia en curso.'));
+      const handle = entry.handle ?? this.storage;
+      const param = entry.cluster !== undefined ? R.readFileByClusterParam(handle, entry.cluster, 0) : R.readFileByNameParam(handle, entry.name, !!entry.unicode, 0);
+      return new Promise((resolve, reject) => {
+        const chunks = []; let got = 0, size = 0, crcMode = null, done = false, cancelling = false;
+        const finish = (err) => { if (done) return; done = true; clearTimeout(this.readTimer); this.read = null; if (err) { this.log('Lectura de ' + entry.name + ': ' + err.message); reject(err); } else { const data = concat(...chunks); this.log('Leído ' + entry.name + ': ' + data.length + ' bytes' + (size ? ' de ' + size : '')); resolve({ data, size }); } };
+        const arm = (ms) => { clearTimeout(this.readTimer); this.readTimer = setTimeout(() => finish(cancelling ? null : new Error('El badge dejó de enviar datos.')), ms); };
+        const cancel = async () => { if (cancelling) return; cancelling = true; try { await this.tryRequest(OP.FILE_READ_BACK, R.READ_CANCEL(0), 3000); } catch { /* the badge may already have stopped */ } arm(600); };
+        this.read = {
+          data: (p) => {
+            if (done || p.length < 4) return;
+            const offset = readU32BE(p, 0); let body = p.slice(4);
+            if (crcMode === null) { const looksFile = (b) => (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46) || (b[0] === 0xff && b[1] === 0xd8); crcMode = body.length > 6 && !looksFile(body) && (looksFile(body.slice(2)) || crc16(body.slice(2)) === ((body[0] << 8) | body[1])); this.log('Lectura: ' + (crcMode ? 'con' : 'sin') + ' CRC por paquete'); }
+            if (crcMode) body = body.slice(2);
+            if (offset !== got) this.log('Lectura: desfase ' + offset + ' ≠ ' + got);
+            chunks.push(body); got += body.length; onProgress(got, size);
+            if (got >= maxBytes || (size && got >= size)) { if (size && got >= size) arm(1500); else cancel(); } else arm(4000);
+          },
+          stop: (ret) => { if (ret === 0 || cancelling) finish(); else finish(new Error('El badge interrumpió la lectura (código ' + ret + ').')); },
+        };
+        arm(timeout);
+        this.request(OP.FILE_READ_BACK, param, 10000).then((p) => { size = R.parseReadStart(p); this.log('Lectura de ' + entry.name + ': ' + size + ' bytes anunciados'); if (!size) arm(4000); }).catch((e) => finish(e.status === 2 ? new Error('Este badge no permite leer archivos (NOT_SUPPORTED).') : e));
+      });
+    }
+    /* Reads just enough of an AVI/JPEG to extract its first frame. */
+    async previewFile(entry) {
+      let budget = 24 * 1024, jpeg = null;
+      for (let attempt = 0; attempt < 3 && !jpeg; attempt++) {
+        const { data, size } = await this.readFile(entry, { maxBytes: budget });
+        jpeg = R.firstJpeg(data);
+        if (!jpeg && (size && data.length >= size)) break;
+        budget *= 3;
+      }
+      if (!jpeg) throw new Error('No se encontró un cuadro JPEG en ' + entry.name + '.');
+      return jpeg;
+    }
+
     /* 0x1F needs the cluster reported by the browse; 0x23 deletes by 8.3 name. Both validated against the official SDK layouts. */
     async deleteFile(entry) {
       if (!entry) throw new Error('Elegí un archivo.');
@@ -429,6 +471,8 @@
     async handleCommand(p) {
       const t = this.transfer;
       if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_BROWSE) { this.log('RX listado ' + hx(p.parameter.slice(1), 48)); if (this.browse) this.browse.data(p.parameter.slice(1)); else this.log('(datos de listado fuera de sesión)'); return; }
+      if (p.opcode === OP.DATA && p.parameter[0] === OP.FILE_READ_BACK) { if (p.needsReply) await this.write(R.responseFrame(OP.DATA, p.serial)); if (this.read) this.read.data(p.parameter.slice(1)); return; }
+      if (p.opcode === OP.FILE_READ_BACK) { const op = p.parameter[0], ret = p.parameter[1] ?? 0; this.log('RX lectura op=0x' + (op ?? 0).toString(16) + ' ret=' + ret); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); if (op === 0x80 || op === 0x81) this.read?.stop(op === 0x81 ? 0 : ret); return; }
       if (p.opcode === OP.FILE_BROWSE_STOP) { this.log('RX fin de listado, motivo=' + (p.parameter[0] ?? 0)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial)); this.browse?.stop(p.parameter[0] ?? 0); return; }
       if (!t?.active) { this.log('RX comando 0x' + p.opcode.toString(16) + ' fuera de transferencia: ' + hx(p.parameter, 40)); if (p.needsReply) await this.write(R.responseFrame(p.opcode, p.serial, 2)); return; }
       if (p.opcode === OP.FILE_READ) {

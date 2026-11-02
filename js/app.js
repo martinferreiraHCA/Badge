@@ -467,7 +467,7 @@
     $('screenStatus').textContent = c.screen ? c.screen.width + ' × ' + c.screen.height : '—'; $('deviceInfoText').textContent = c.info;
     if (c.brightness !== null) { $('brightness').value = c.brightness; $('brightnessOut').textContent = c.brightness + ' %'; }
     $('authBtn').disabled = !c.tx || ['authenticating', 'ready'].includes(c.state) || !!c.transfer?.active;
-    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage']) $(id).disabled = !c.ready || !!c.transfer?.active;
+    for (const id of ['infoBtn', 'storageBtn', 'batteryBtn', 'diagBtn', 'refreshFiles', 'brightnessApply', 'syncTime', 'deleteByNameBtn', 'formatStorage', 'previewAll']) $(id).disabled = !c.ready || !!c.transfer?.active;
     $$('[data-lang]').forEach((b) => { b.disabled = !c.ready; }); $('disconnectBtn').disabled = !c.connected; $('cancelTransfer').disabled = !c.transfer?.active;
     $('homeDeviceName').textContent = c.ready ? name : 'Sin badge conectado'; $('homeDeviceMeta').textContent = c.ready ? 'Perfil ' + c.profile + ' · autenticado · ' + (c.txProps || '') : 'Conectá por Bluetooth para ver batería, archivos y enviar contenido.'; $('homeStats').hidden = !c.ready; $('homeBattery').textContent = c.battery === null ? '—' : c.battery + '%'; $('homeFiles').textContent = c.files.filter((f) => f.isFile).length || '—'; $('homeStorage').textContent = c.storageName || '—';
     $('deviceFileCount').hidden = !c.files.length; $('deviceFileCount').textContent = c.files.length; $('deleteAllFiles').hidden = !c.files.length;
@@ -491,7 +491,30 @@
   async function refreshDeviceFiles() { if (!client.ready) throw new Error('Conectá el badge primero.'); const t = await BS.db.thumbs.all().catch(() => []); thumbCache = Object.fromEntries(t.map((x) => [x.name, x])); await client.browseFiles(); renderDeviceFiles(); }
   function renderDeviceFiles() {
     const files = client.files; $('deviceFilesEmpty').hidden = files.length > 0; $('deviceFilesTitle').textContent = files.length ? files.length + ' archivos en ' + (client.storageName || 'el badge') : 'Contenido guardado';
-    $('deviceFiles').innerHTML = files.map((f, i) => { const th = thumbCache[f.name]; return '<div class="file-card"><div class="thumb">' + (th ? '<img src="' + esc(th.thumb) + '" alt="">' : esc(f.isFile ? (f.name.split('.').pop() || '').toUpperCase() : 'CARPETA')) + '</div><strong>' + esc((f.path ? f.path + '/' : '') + f.name) + '</strong><small>' + (th ? esc(th.meta) : 'clúster ' + f.cluster + (f.isFile ? '' : ' · carpeta')) + '</small><div class="row"><button class="btn small danger" data-delete-file="' + i + '">' + icon('trash') + 'Borrar</button></div></div>'; }).join('');
+    $('previewAll').hidden = !files.some((f) => f.isFile && !thumbCache[f.name]);
+    $('deviceFiles').innerHTML = files.map((f, i) => { const th = thumbCache[f.name]; return '<div class="file-card"><div class="thumb">' + (th ? '<img src="' + esc(th.thumb) + '" alt="">' : esc(f.isFile ? (f.name.split('.').pop() || '').toUpperCase() : 'CARPETA')) + '</div><strong>' + esc((f.path ? f.path + '/' : '') + f.name) + '</strong><small>' + (th ? esc(th.meta) : 'clúster ' + f.cluster + (f.isFile ? '' : ' · carpeta')) + '</small><div class="row">' + (f.isFile ? (th ? '' : '<button class="btn small" data-preview-file="' + i + '">' + icon('image') + 'Vista</button>') + '<button class="btn small" data-download-file="' + i + '">' + icon('download') + '</button>' : '') + '<button class="btn small danger" data-delete-file="' + i + '">' + icon('trash') + '</button></div></div>'; }).join('');
+  }
+  async function previewDeviceFile(i, quiet = false) {
+    const f = client.files[i]; if (!f || !f.isFile) return;
+    $('previewStatus').hidden = false; $('previewStatus').textContent = 'Leyendo ' + f.name + '…';
+    try {
+      const jpeg = await client.previewFile(f);
+      const bmp = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' })); const thumb = thumbOf(bmp, 160); const info = BS.jpeg.inspect(jpeg); bmp.close();
+      const entry = { name: f.name, thumb, meta: 'Leído del badge · ' + (info ? info.width + ' × ' + info.height : '') + ' · ' + bytesLabel(jpeg.length) + ' (1er cuadro)', date: Date.now() };
+      await BS.db.thumbs.put(entry).catch(() => {}); thumbCache[f.name] = entry; renderDeviceFiles();
+      if (!quiet) toast('Vista previa de ' + f.name + ' lista.');
+    } finally { $('previewStatus').hidden = true; }
+  }
+  async function previewAllFiles() {
+    const pending = client.files.map((f, i) => [f, i]).filter(([f]) => f.isFile && !thumbCache[f.name]);
+    let n = 0; for (const [f, i] of pending) { try { await previewDeviceFile(i, true); n++; } catch (e) { log('Vista previa de ' + f.name + ': ' + e.message); } }
+    toast(n + ' de ' + pending.length + ' vistas previas generadas.');
+  }
+  async function downloadDeviceFile(i) {
+    const f = client.files[i]; if (!f) return;
+    $('previewStatus').hidden = false;
+    try { const { data } = await client.readFile(f, { onProgress: (got, size) => { $('previewStatus').textContent = 'Descargando ' + f.name + ' · ' + bytesLabel(got) + (size ? ' / ' + bytesLabel(size) : ''); } }); download(new Blob([data], { type: /\.avi$/i.test(f.name) ? 'video/x-msvideo' : 'application/octet-stream' }), f.name); toast(f.name + ' descargado (' + bytesLabel(data.length) + ').'); }
+    finally { $('previewStatus').hidden = true; }
   }
   async function deleteDeviceFile(i) { const f = client.files[i]; if (!f) return; if (!confirm('¿Borrar «' + f.name + '» del badge? No se puede deshacer.')) return; await client.deleteFile(f); toast('Borrado ' + f.name + '.'); await BS.db.thumbs.remove(f.name).catch(() => {}); renderDeviceFiles(); updateConnection(client); }
   async function deleteByNameUI() { const name = sanitizeName($('deleteByName').value); if (!$('deleteByName').value.trim()) throw new Error('Escribí el nombre del archivo.'); if (!confirm('¿Borrar «' + name + '» del badge?')) return; await client.deleteFileByName(name); toast('Borrado ' + name + '.'); await BS.db.thumbs.remove(name).catch(() => {}); await refreshDeviceFiles().catch(() => {}); }
@@ -528,7 +551,8 @@
     $('authBtn').onclick = action(() => client.authenticate()); $('disconnectBtn').onclick = () => client.disconnect(); $('infoBtn').onclick = action(() => client.queryInfo()); $('storageBtn').onclick = action(() => client.queryStorage()); $('batteryBtn').onclick = action(async () => { const b = await client.refreshBattery(); toast('Batería: ' + (b.level ?? '?') + ' %'); });
     $('diagBtn').onclick = action(runDiagnostics); $('cancelTransfer').onclick = () => client.cancel(); $('refreshFiles').onclick = action(refreshDeviceFiles); $('deleteAllFiles').onclick = action(deleteAllFiles);
     $('deleteByNameBtn').onclick = action(deleteByNameUI); $('formatStorage').onclick = action(formatStorageUI);
-    $('deviceFiles').onclick = action((e) => { const b = e.target.closest('[data-delete-file]'); if (b) return deleteDeviceFile(+b.dataset.deleteFile); });
+    $('deviceFiles').onclick = action((e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.deleteFile) return deleteDeviceFile(+b.dataset.deleteFile); if (b.dataset.previewFile) return previewDeviceFile(+b.dataset.previewFile); if (b.dataset.downloadFile) return downloadDeviceFile(+b.dataset.downloadFile); });
+    $('previewAll').onclick = action(previewAllFiles);
     $('brightness').oninput = (e) => { $('brightnessOut').textContent = e.target.value + ' %'; }; $('brightnessApply').onclick = action(async () => { await client.setBrightness(+$('brightness').value); toast('Brillo aplicado.'); });
     $$('[data-lang]').forEach((b) => { b.onclick = action(async () => { await client.setLanguage(b.dataset.lang); toast('Idioma enviado.'); }); }); $('syncTime').onclick = action(async () => { await client.syncTime(); toast('Hora enviada al badge.'); });
     $('forgetDevices').onclick = action(async () => { for (const d of await client.rememberedDevices()) { try { await d.forget?.(); } catch { /* ignore */ } } await BS.db.devices.clear(); toast('Badges olvidados.'); });

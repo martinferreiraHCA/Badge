@@ -56,6 +56,7 @@ respuesta: cuerpo = [estado, sn, parámetros…]   estado 0 OK · 1 error · 2 n
 | 0x21 | ACTION_PREPARE | `[0]` antes de transferir |
 | 0x22 | DEVICE_FORMAT | `[devHandle BE32]` → `[motivo]`; vacía el almacenamiento de medios. Solo desde el botón «Formatear» con doble confirmación |
 | 0x23 | ONE_FILE_DELETE | `[0x00, nombre ASCII]` |
+| 0x24 | ONE_FILE_TRANS_BACK | lectura de un archivo: `[1, devHandle BE32, offset BE32, clúster BE32]` o `[2, devHandle BE32, offset BE32, unicode, nombre]` → `[op, tamaño BE32]`; datos en tramas `0x01` `[0x24, offset BE32, crc16?, bytes]`; fin `[0x80, ret]` del badge; cancelación `[0x81, motivo]` del teléfono |
 | 0x27 | DEVICE_PARM_EXTRA | `[op (0 transferencia / 1 borrado), devHandle BE32, crc16?]` → `[…, 1]` si usa CRC por paquete |
 | 0x28 | SIMPLE_FILE_TRANS | archivos pequeños (carátulas); no se usa en badges |
 
@@ -102,6 +103,10 @@ nombre: UTF-16LE si unicode, GBK en caso contrario
 - Por clúster (`DelDevFileCmd` 0x1F): `[último(1), devHandle BE32, tipo(1 = archivo), clúster BE32]`.
 - Por nombre (`DeleteFileByNameCmd` 0x23): `[0x00, nombre ASCII]`. Es el respaldo si 0x1F responde con error, y lo que usa «Borrar por nombre».
 - Vaciar todo (`DeviceFormatCmd` 0x22): `[devHandle BE32]`; respuesta `[motivo]` (0 = OK).
+
+### Lectura (vista previa y descarga)
+
+`ReadFileFromDeviceCmd` 0x24 arranca la lectura por clúster o por nombre (nombre unicode = `"\\U"` + UTF-16LE + `00 00`). El badge responde con el tamaño y manda el contenido en tramas DATA `[0x24][offset BE32][crc16 BE si el dispositivo lo soporta][bytes]`, luego el comando `[0x80, ret]`. Para la vista previa se leen ~24 KB, se extrae el primer JPEG (`FF D8 … FF D9`) y se cancela con `[0x81, 0]`.
 
 ## Canal Qix (0x9E) en FD02
 

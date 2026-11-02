@@ -84,6 +84,20 @@ class SimBadge extends EventTarget {
         }, 2);
         return;
       }
+      case R.OP.FILE_READ_BACK: {
+        const op = p[0];
+        if (op === 0x81) { this.reply(f, 0); if (this.reading) { this.reading.cancelled = true; setTimeout(() => this.cmd(R.OP.FILE_READ_BACK, [0x80, 0]), 2); } return; }
+        let name = null;
+        if (op === 1) { const cluster = readU32BE(p, 9); const idx = cluster - 101; name = this.files[idx]; }
+        else if (op === 2) { name = new TextDecoder().decode(p.slice(10)).replace(/\0+$/, ''); }
+        const data = name && this.contents && this.contents[name];
+        if (!data) return this.reply(f, 3);
+        this.reply(f, 0, concat(new Uint8Array([op]), BS.util.u32be(data.length)));
+        const r = this.reading = { cancelled: false }; let off = 0;
+        const pump = () => { if (r.cancelled) return; if (off >= data.length) { this.reading = null; this.cmd(R.OP.FILE_READ_BACK, [0x80, 0]); return; } const part = data.slice(off, off + 490), c = crc16(part); this.send(R.commandFrame(R.OP.DATA, concat(new Uint8Array([R.OP.FILE_READ_BACK]), BS.util.u32be(off), new Uint8Array([c >> 8, c & 255]), part), false, this.serial++ & 255)); off += part.length; setTimeout(pump, 1); };
+        setTimeout(pump, 2);
+        return;
+      }
       case R.OP.DEVICE_FORMAT: { if (readU32BE(p, 0) !== this.storageHandle) return this.reply(f, 5); this.deleted = (this.deleted || []).concat(this.files.splice(0)); this.folders = {}; return this.reply(f, 0, [0]); }
       case R.OP.FILE_DELETE: {
         const dev = readU32BE(p, 1), cluster = readU32BE(p, 6);
@@ -133,7 +147,7 @@ class SimBadge extends EventTarget {
     if (f.opcode === R.OP.FILE_NAME) {
       const name = new TextDecoder().decode(f.parameter).replace(/\0+$/, '');
       if (this.renameCollisions > 0) { this.renameCollisions--; this.cmd(R.OP.FILE_NAME, []); return; }
-      this.files.push(name); this.transfer.name = name; this.cmd(R.OP.FILE_END, [0]);
+      this.files.push(name); this.transfer.name = name; (this.contents = this.contents || {})[name] = this.transfer.data; this.cmd(R.OP.FILE_END, [0]);
     } else if (f.opcode === R.OP.FILE_END) { this.received = this.transfer; this.transfer = null; this.dispatchEvent(new Event('sim-complete')); }
   }
   onQix(bytes) {
